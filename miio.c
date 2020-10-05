@@ -45,6 +45,7 @@
 #include "miio_interface.h"
 #include "miio_message.h"
 #include "ntp.h"
+#include "ota.h"
 
 /*
  * static
@@ -102,7 +103,11 @@ static int rpc_send_report(int msg_id, const char *method, const char *params);
 static int miio_get_properties_callback(message_arg_t arg_pass, int result, int size, void *arg);
 static int miio_set_properties_callback(message_arg_t arg_pass, int result, int size, void *arg);
 static int send_config_save(message_t *msg, int module, void *arg, int size);
-static int send_complicate_request(message_t *msg, int message, int receiver, int id, int piid, int siid, int module, int value);
+static int send_complicate_request(message_t *msg, int message, int receiver, int id, int piid, int siid, int module, void *arg, int size);
+static int miio_action(const char *msg);
+static int miio_action_func(int id,char *did,int siid,int aiid,cJSON *json_in);
+static int miio_action_func_ack(message_arg_t arg_pass, int result, int size, void *arg);
+static int miot_properties_changed(int piid,int siid,int value, char* string);
 
 /*
  * %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -113,7 +118,7 @@ static int send_complicate_request(message_t *msg, int message, int receiver, in
 /*
  * helper
  */
-static int send_complicate_request(message_t *msg, int message, int receiver, int id, int piid, int siid, int module, int value)
+static int send_complicate_request(message_t *msg, int message, int receiver, int id, int piid, int siid, int module, void *arg, int size)
 {
 	/********message body********/
 	msg->message = message;
@@ -122,7 +127,8 @@ static int send_complicate_request(message_t *msg, int message, int receiver, in
 	msg->arg_pass.dog = piid;
 	msg->arg_pass.chick = siid;
 	msg->arg_in.cat = module;
-	msg->arg_in.dog = value;
+	msg->arg = arg;
+	msg->arg_size = size;
 	/****************************/
 	switch(receiver) {
 	case SERVER_DEVICE:
@@ -130,6 +136,9 @@ static int send_complicate_request(message_t *msg, int message, int receiver, in
 		break;
 	case SERVER_VIDEO:
 		server_video_message(msg);
+		break;
+	case SERVER_KERNEL:
+//		server_kernel_message(msg);
 		break;
 	}
 }
@@ -250,7 +259,7 @@ static void miio_request_local_status(void)
 static int miio_get_properties_callback(message_arg_t arg_pass, int result, int size, void *arg)
 {
     cJSON *item_id,*item_result = NULL,*item_result_param1 = NULL; //ack msg
-    video_miio_config_t *tmp;
+    video_iot_config_t *tmp;
     cJSON *root_ack = 0;
     int ret = -1;
 	char *ackbuf = 0;
@@ -275,7 +284,7 @@ static int miio_get_properties_callback(message_arg_t arg_pass, int result, int 
     switch(arg_pass.chick) {
 		case IID_2_CameraControl:
 			if( !result ) {
-				tmp = (video_miio_config_t*)arg;
+				tmp = (video_iot_config_t*)arg;
 				if( arg_pass.dog == IID_2_1_On) item = cJSON_CreateNumber(tmp->on);
 				else if( arg_pass.dog == IID_2_2_ImageRollover) item = cJSON_CreateNumber(tmp->image_roll);
 				else if( arg_pass.dog == IID_2_3_NightShot) item = cJSON_CreateNumber(tmp->night);
@@ -283,7 +292,6 @@ static int miio_get_properties_callback(message_arg_t arg_pass, int result, int 
 				else if( arg_pass.dog == IID_2_5_WdrMode) item = cJSON_CreateNumber(tmp->wdr);
 				else if( arg_pass.dog == IID_2_6_GlimmerFullColor) item = cJSON_CreateNumber(tmp->glimmer);
 				else if( arg_pass.dog == IID_2_7_RecordingMode) item = cJSON_CreateNumber(tmp->recording);
-				else if( arg_pass.dog == IID_2_8_MotionTracking) item = cJSON_CreateNumber(tmp->motion);
 				cJSON_AddItemToObject(item_result_param1,"value",item);
 				item = cJSON_CreateNumber(0);
 				cJSON_AddItemToObject(item_result_param1,"code",item);
@@ -293,10 +301,29 @@ static int miio_get_properties_callback(message_arg_t arg_pass, int result, int 
 				cJSON_AddItemToObject(item_result_param1,"code",item);
 			}
 			break;
+		case IID_3_IndicatorLight:
+			if( !result ) {
+/*				tmp = (device_iot_config_t*)arg;
+				if( arg_pass.dog == IID_3_1_On) item = cJSON_CreateNumber(tmp->on);
+				cJSON_AddItemToObject(item_result_param1,"value",item);
+				item = cJSON_CreateNumber(0);
+				cJSON_AddItemToObject(item_result_param1,"code",item);
+*/
+			}
+			else {
+				item = cJSON_CreateNumber(-4004);
+				cJSON_AddItemToObject(item_result_param1,"code",item);
+			}
+			break;
 		case IID_4_MemoryCardManagement:
 			if( !result ) {
-				int val = *((int*)arg);
-				item = cJSON_CreateNumber(val);
+/*
+				tmp = (device_iot_config_t*)arg;
+				if( arg_pass.dog == IID_4_1_Status) item = cJSON_CreateNumber(tmp->on);
+				else if( arg_pass.dog == IID_4_2_StorageTotalSpace) item = cJSON_CreateNumber(tmp->image_roll);
+				else if( arg_pass.dog == IID_4_3_StorageFreeSpace) item = cJSON_CreateNumber(tmp->night);
+				else if( arg_pass.dog == IID_4_4_StorageUsedSpace) item = cJSON_CreateNumber(tmp->watermark);
+*/
 				cJSON_AddItemToObject(item_result_param1,"value",item);
 				item = cJSON_CreateNumber(0);
 				cJSON_AddItemToObject(item_result_param1,"code",item);
@@ -308,12 +335,69 @@ static int miio_get_properties_callback(message_arg_t arg_pass, int result, int 
 			break;
 		case IID_5_MotionDetection:
 			if( !result ) {
-				tmp = (video_miio_config_t*)arg;
+				tmp = (video_iot_config_t*)arg;
 				if( arg_pass.dog == IID_5_1_MotionDetection) item = cJSON_CreateNumber(tmp->motion_switch);
 				else if( arg_pass.dog == IID_5_2_AlarmInterval) item = cJSON_CreateNumber(tmp->motion_alarm);
 				else if( arg_pass.dog == IID_5_3_DetectionSensitivity) item = cJSON_CreateNumber(tmp->motion_sensitivity);
-				else if( arg_pass.dog == IID_5_4_MotionDetectionStartTime) item = cJSON_CreateNumber(tmp->motion_start);
-				else if( arg_pass.dog == IID_5_5_MotionDetectionEndTime) item = cJSON_CreateNumber(tmp->motion_end);
+				else if( arg_pass.dog == IID_5_4_MotionDetectionStartTime) item = cJSON_CreateString(tmp->motion_start);
+				else if( arg_pass.dog == IID_5_5_MotionDetectionEndTime) item = cJSON_CreateString(tmp->motion_end);
+				cJSON_AddItemToObject(item_result_param1,"value",item);
+				item = cJSON_CreateNumber(0);
+				cJSON_AddItemToObject(item_result_param1,"code",item);
+			}
+			else {
+				item = cJSON_CreateNumber(-4004);
+				cJSON_AddItemToObject(item_result_param1,"code",item);
+			}
+			break;
+		case IID_6_MoreSet:
+			if( !result ) {
+				if(arg_pass.dog == IID_6_1_Ipaddr) {
+/*					tmp = (kernel_iot_config_t*)arg;
+					item = cJSON_CreateNumber(tmp->custom_distortion);
+*/
+				}
+				else if(arg_pass.dog == IID_6_2_MacAddr) {
+/*					tmp = (kernel_iot_config_t*)arg;
+					item = cJSON_CreateNumber(tmp->custom_distortion);
+*/
+				}
+				else if(arg_pass.dog == IID_6_3_WifiName) {
+/*					tmp = (kernel_iot_config_t*)arg;
+					item = cJSON_CreateNumber(tmp->custom_distortion);
+*/
+				}
+				else if(arg_pass.dog == IID_6_4_WifiRssi) {
+/*					tmp = (kernel_iot_config_t*)arg;
+					item = cJSON_CreateNumber(tmp->custom_distortion);
+*/
+				}
+				else if(arg_pass.dog == IID_6_5_CurrentMode) {
+/*					tmp = (kernel_iot_config_t*)arg;
+					item = cJSON_CreateNumber(tmp->custom_distortion);
+*/
+				}
+				else if(arg_pass.dog == IID_6_6_TimeZone) {
+/*					tmp = (kernel_iot_config_t*)arg;
+					item = cJSON_CreateNumber(tmp->custom_distortion);
+*/
+				}
+				else if(arg_pass.dog == IID_6_7_StorageSwitch) {
+					tmp = (video_iot_config_t*)arg;
+					item = cJSON_CreateNumber(tmp->custom_local_save);
+				}
+				else if(arg_pass.dog == IID_6_8_CloudUploadEnable) {
+					tmp = (video_iot_config_t*)arg;
+					item = cJSON_CreateNumber(tmp->custom_cloud_save);
+				}
+				else if(arg_pass.dog == IID_6_9_MotionAlarmPush) {
+					tmp = (video_iot_config_t*)arg;
+					item = cJSON_CreateNumber(tmp->custom_warning_push);
+				}
+				else if(arg_pass.dog == IID_6_10_DistortionSwitch) {
+					tmp = (video_iot_config_t*)arg;
+					item = cJSON_CreateNumber(tmp->custom_distortion);
+				}
 				cJSON_AddItemToObject(item_result_param1,"value",item);
 				item = cJSON_CreateNumber(0);
 				cJSON_AddItemToObject(item_result_param1,"code",item);
@@ -349,7 +433,6 @@ static int miio_get_properties_vlaue(int id,char *did,int piid,int siid,cJSON *j
     switch(siid){
 		case IID_1_DeviceInformation: {
 			if(piid == IID_1_1_Manufacturer) {
-				log_info("IID_1_1_Manufacturer");
 				char manufacturer[MAX_SYSTEM_STRING_SIZE];
 				memset(manufacturer,0,MAX_SYSTEM_STRING_SIZE);
 				sprintf(manufacturer, "%s", config.device.vendor);
@@ -357,7 +440,6 @@ static int miio_get_properties_vlaue(int id,char *did,int piid,int siid,cJSON *j
 				cJSON_AddItemToObject(json,"value",item);
 			}
 			else if(piid == IID_1_2_Model) {
-				log_info("IID_1_2_Model");
 				char model[MAX_SYSTEM_STRING_SIZE];
 				memset(model,0,MAX_SYSTEM_STRING_SIZE);
 				sprintf(model, "%s", config.device.model);
@@ -365,7 +447,6 @@ static int miio_get_properties_vlaue(int id,char *did,int piid,int siid,cJSON *j
 				cJSON_AddItemToObject(json,"value",item);
 			}
 			else if(piid == IID_1_3_SerialNumber) {
-				log_info("IID_1_3_SerialNumber");
 				char serial[MAX_SYSTEM_STRING_SIZE];
 				memset(serial,0,MAX_SYSTEM_STRING_SIZE);
 				sprintf(serial, "%s", config.device.key);
@@ -373,10 +454,9 @@ static int miio_get_properties_vlaue(int id,char *did,int piid,int siid,cJSON *j
 				cJSON_AddItemToObject(json,"value",item);
 			}
 			else if(piid == IID_1_4_FirmwareRevision) {
-				log_info("IID_1_4_FirmwareRevision");
 				char revision[MAX_SYSTEM_STRING_SIZE];
 				memset(revision,0,MAX_SYSTEM_STRING_SIZE);
-				sprintf(revision, "%s", config.device.version);
+				sprintf(revision, "%s", APPLICATION_VERSION_STRING);
 				item = cJSON_CreateString(revision);
 				cJSON_AddItemToObject(json,"value",item);
 			}
@@ -384,14 +464,28 @@ static int miio_get_properties_vlaue(int id,char *did,int piid,int siid,cJSON *j
 		}
 		case IID_2_CameraControl:
 		case IID_5_MotionDetection:
-			send_complicate_request(&msg, MSG_VIDEO_GET_PARA, SERVER_VIDEO, id, piid, siid, 0, 0);
-			log_info("message processed asynchronously!");
+			send_complicate_request(&msg, MSG_VIDEO_GET_PARA, SERVER_VIDEO, id, piid, siid, 0, 0, 0);
 			return -1;
 		case IID_3_IndicatorLight:
 		case IID_4_MemoryCardManagement:
-			send_complicate_request(&msg, MSG_DEVICE_GET_PARA, SERVER_DEVICE, id, piid, siid,0, 0);
-			log_info("message processed asynchronously!");
+			send_complicate_request(&msg, MSG_DEVICE_GET_PARA, SERVER_DEVICE, id, piid, siid,0, 0, 0);
 			return -1;
+		case IID_6_MoreSet:
+			if( 	(piid == IID_6_1_Ipaddr) || (piid == IID_6_2_MacAddr) || (piid == IID_6_3_WifiName) ||
+					(piid == IID_6_4_WifiRssi) || (piid == IID_6_5_CurrentMode) ) {
+				send_complicate_request(&msg, MSG_DEVICE_GET_PARA, SERVER_DEVICE, id, piid, siid, 0, 0, 0);
+				return -1;
+			}
+			else if(piid == IID_6_6_TimeZone) {
+				send_complicate_request(&msg, MSG_KERNEL_GET_PARA, SERVER_KERNEL, id, piid, siid, 0, 0, 0);
+				return -1;
+			}
+			else if(	(piid == IID_6_7_StorageSwitch) || (piid == IID_6_8_CloudUploadEnable) ||
+					(piid == IID_6_9_MotionAlarmPush) || (piid == IID_6_10_DistortionSwitch) ) {
+				send_complicate_request(&msg, MSG_VIDEO_GET_PARA, SERVER_VIDEO, id, piid, siid, 0, 0, 0);
+				return -1;
+			}
+			break;
 		default:
 			return -1;
 	}
@@ -488,20 +582,14 @@ static int miio_set_properties_callback(message_arg_t arg_pass, int result, int 
     cJSON_AddItemToObject(item_result_param1,"siid",item);
     item = cJSON_CreateNumber(arg_pass.dog);
     cJSON_AddItemToObject(item_result_param1,"piid",item);
-    //find property
-    switch(arg_pass.chick) {
-		case IID_2_CameraControl: {
-			if( !result ) {
-				item = cJSON_CreateNumber(0);
-				cJSON_AddItemToObject(item_result_param1,"code",item);
-			}
-			else {
-				item = cJSON_CreateNumber(-4004);
-				cJSON_AddItemToObject(item_result_param1,"code",item);
-			}
-			break;
-		}
-    }
+	if( !result ) {
+		item = cJSON_CreateNumber(0);
+		cJSON_AddItemToObject(item_result_param1,"code",item);
+	}
+	else {
+		item = cJSON_CreateNumber(-4004);
+		cJSON_AddItemToObject(item_result_param1,"code",item);
+	}
     cJSON_AddItemToArray(item_result,item_result_param1);
     cJSON_AddItemToObject(root_ack,"result",item_result);
     //socket send
@@ -529,104 +617,124 @@ static int miio_set_properties_vlaue(int id, char *did, int piid, int siid, cJSO
 	case IID_2_CameraControl:
 		if(piid == IID_2_1_On) {
             log_info("IID_2_1_On:%d ",value_json->valueint);
-            if( value_json->valueint == 0)
-            	send_complicate_request(&msg, MSG_VIDEO_STOP, SERVER_VIDEO, id, piid, siid, 0, 0);
+            if( value_json->valueint == 1)
+            	send_complicate_request(&msg, MSG_VIDEO_START, SERVER_VIDEO, id, piid, siid, 0, 0, 0);
             else
-    			send_complicate_request(&msg, MSG_VIDEO_START, SERVER_VIDEO, id, piid, siid, 0, 0);
-			log_info("message processed asynchronously!");
+    			send_complicate_request(&msg, MSG_VIDEO_STOP, SERVER_VIDEO, id, piid, siid, 0, 0, 0);
 			return -1;
 		}
 		else if(piid == IID_2_2_ImageRollover) {
             log_info("IID_2_2_ImageRollover:%d \n",value_json->valueint);
-			send_complicate_request(&msg, MSG_VIDEO_CTRL_DIRECT, SERVER_VIDEO, id, piid, siid,
-					VIDEO_CTRL_IMAGE_ROLLOVER, value_json->valueint);
-			log_info("message processed asynchronously!");
+			send_complicate_request(&msg, MSG_VIDEO_CTRL_EXT, SERVER_VIDEO, id, piid, siid,
+					VIDEO_CTRL_IMAGE_ROLLOVER, &(value_json->valueint), sizeof(int));
 			return -1;
 		}
 		else if(piid == IID_2_3_NightShot) {
 			log_info("IID_2_3_NightShot:%d ",value_json->valueint);
 			send_complicate_request(&msg, MSG_VIDEO_CTRL_DIRECT, SERVER_VIDEO, id, piid, siid,
-					VIDEO_CTRL_NIGHT_SHOT, value_json->valueint);
-			log_info("message processed asynchronously!");
+					VIDEO_CTRL_NIGHT_SHOT, &(value_json->valueint), sizeof(int));
 			return -1;
 		}
 		else if(piid == IID_2_4_TimeWatermark) {
 			log_info("IID_2_4_TimeWatermark:%d ",value_json->valueint);
     		send_complicate_request(&msg, MSG_VIDEO_CTRL_EXT, SERVER_VIDEO, id, piid, siid,
-    				VIDEO_CTRL_TIME_WATERMARK, value_json->valueint);
-    		log_info("message processed asynchronously!");
+    				VIDEO_CTRL_TIME_WATERMARK, &(value_json->valueint), sizeof(int));
     		return -1;
 		}
 		else if(piid == IID_2_5_WdrMode) {
 			log_info("IID_2_5_WdrMode:%d ",value_json->valueint);
 			send_complicate_request(&msg, MSG_VIDEO_CTRL_DIRECT, SERVER_VIDEO, id, piid, siid,
-					VIDEO_CTRL_WDR_MODE, value_json->valueint);
-			log_info("message processed asynchronously!");
+					VIDEO_CTRL_WDR_MODE, &(value_json->valueint), sizeof(int));
 			return -1;
 		}
 		else if(piid == IID_2_6_GlimmerFullColor) {
 			log_info("IID_2_6_GlimmerFullColor:%d ",value_json->valueint);
 			send_complicate_request(&msg, MSG_VIDEO_CTRL_DIRECT, SERVER_VIDEO, id, piid, siid,
-					VIDEO_CTRL_GLIMMER_FULL_COLOR, value_json->valueint);
-			log_info("message processed asynchronously!");
+					VIDEO_CTRL_GLIMMER_FULL_COLOR, &(value_json->valueint), sizeof(int));
 			return -1;
 		}
 		else if(piid == IID_2_7_RecordingMode) {
 			log_info("IID_2_7_RecordingMode:%d ",value_json->valueint);
 			send_complicate_request(&msg, MSG_VIDEO_CTRL_DIRECT, SERVER_VIDEO, id, piid, siid,
-					VIDEO_CTRL_RECORDING_MODE, value_json->valueint);
-			log_info("message processed asynchronously!");
+					VIDEO_CTRL_RECORDING_MODE, &(value_json->valueint), sizeof(int));
 			return -1;
 		}
-		else if(piid == IID_2_8_MotionTracking) {
-			log_info("IID_2_8_MotionTracking:%d ",value_json->valueint);
-			send_complicate_request(&msg, MSG_VIDEO_CTRL_DIRECT, SERVER_VIDEO, id, piid, siid,
-					VIDEO_CTRL_MOTION_TRACKING, value_json->valueint);
-			log_info("message processed asynchronously!");
-			return -1;
-		}
-		log_info("message processed asynchronously!");
+
 		return -1;
 	case IID_3_IndicatorLight:
 		if(piid == IID_3_1_On) {
 			log_info("IID_3_1_On:%d ",value_json->valueint);
+/*			send_complicate_request(&msg, MSG_DEVICE_CTRL_DIRECT, SERVER_DEVICE, id, piid, siid,
+					DEVICE_CTRL_INDICATOR_SWITCH, &(value_json->valueint), sizeof(int));
+*/
+			return -1;
 		}
-		else if (piid == IID_3_2_Mode) {
-			log_info("IID_3_2_Mode:%d ",value_json->valueint);
-		 }
-		else if (piid == IID_3_3_Brightness) {
-			log_info("IID_3_3_Brightness:%d ",value_json->valueint);
-		 }
-		else if (piid == IID_3_4_Color) {
-			log_info("IID_3_4_Color:%d ",value_json->valueint);
-		 }
-		else if (piid == IID_3_5_ColorTemperature) {
-			log_info("IID_3_5_ColorTemperature:%d ",value_json->valueint);
-		 }
-		else if (piid == IID_3_6_Flow) {
-			log_info("IID_3_6_Flow:%d ",value_json->valueint);
-		 }
-		else if (piid == IID_3_7_Saturability) {
-			log_info("IID_3_7_Saturability:%d ",value_json->valueint);
-		 }
 		break;
 	case IID_4_MemoryCardManagement:
 		break;
 	case IID_5_MotionDetection:
 		if(piid == IID_5_1_MotionDetection) {
 			log_info("IID_5_1_MotionDetection:%d ",value_json->valueint);
+    		send_complicate_request(&msg, MSG_VIDEO_CTRL, SERVER_VIDEO, id, piid, siid,
+    				VIDEO_CTRL_MOTION_SWITCH, &(value_json->valueint), sizeof(int) );
+    		return -1;
 		}
 		else if(piid == IID_5_2_AlarmInterval) {
 			log_info("IID_5_2_AlarmInterval:%d ",value_json->valueint);
+    		send_complicate_request(&msg, MSG_VIDEO_CTRL, SERVER_VIDEO, id, piid, siid,
+    				VIDEO_CTRL_MOTION_ALARM_INTERVAL, &(value_json->valueint), sizeof(int) );
+    		return -1;
 		}
 		else if(piid == IID_5_3_DetectionSensitivity) {
 			log_info("IID_5_3_DetectionSensitivity:%d ",value_json->valueint);
+    		send_complicate_request(&msg, MSG_VIDEO_CTRL, SERVER_VIDEO, id, piid, siid,
+    				VIDEO_CTRL_MOTION_SENSITIVITY, &(value_json->valueint), sizeof(int) );
+    		return -1;
 		}
 		else if(piid == IID_5_4_MotionDetectionStartTime) {
 			log_info("IID_5_4_MotionDetectionStartTime:%s ",value_json->valuestring);
+    		send_complicate_request(&msg, MSG_VIDEO_CTRL_DIRECT, SERVER_VIDEO, id, piid, siid,
+    				VIDEO_CTRL_MOTION_START, value_json->valuestring, strlen(value_json->valuestring)+1 );
+    		return -1;
 		}
 		else if(piid == IID_5_5_MotionDetectionEndTime) {
-			log_info("IID_5_4_MotionDetectionStartTime:%s ",value_json->valuestring);
+			log_info("IID_5_4_MotionDetectionEndTime:%s ",value_json->valuestring);
+    		send_complicate_request(&msg, MSG_VIDEO_CTRL, SERVER_VIDEO, id, piid, siid,
+    				VIDEO_CTRL_MOTION_END, value_json->valuestring, strlen(value_json->valuestring)+1 );
+    		return -1;
+		}
+		break;
+	case IID_6_MoreSet:
+		if(piid == IID_6_6_TimeZone) {
+			log_info("IID_6_6_TimeZone:%d ",value_json->valueint);
+/*			send_complicate_request(&msg, MSG_KERNEL_CTRL_DIRECT, SERVER_KERNEL, id, piid, siid,
+					KERNEL_CTRL_TIMEZONE, &(value_json->valueint), sizeof(int));
+*/
+			return -1;
+		}
+		else if(piid == IID_6_7_StorageSwitch) {
+			log_info("IID_6_7_StorageSwitch:%d ",value_json->valueint);
+			send_complicate_request(&msg, MSG_VIDEO_CTRL_DIRECT, SERVER_VIDEO, id, piid, siid,
+					VIDEO_CTRL_CUSTOM_LOCAL_SAVE, &(value_json->valueint), sizeof(int));
+			return -1;
+		}
+		else if(piid == IID_6_8_CloudUploadEnable) {
+			log_info("IID_6_8_CloudUploadEnable:%d ",value_json->valueint);
+			send_complicate_request(&msg, MSG_VIDEO_CTRL_DIRECT, SERVER_VIDEO, id, piid, siid,
+					VIDEO_CTRL_CUSTOM_CLOUD_SAVE, &(value_json->valueint), sizeof(int));
+			return -1;
+		}
+		else if(piid == IID_6_9_MotionAlarmPush) {
+			log_info("IID_6_9_MotionAlarmPush:%d ",value_json->valueint);
+			send_complicate_request(&msg, MSG_VIDEO_CTRL, SERVER_VIDEO, id, piid, siid,
+					VIDEO_CTRL_CUSTOM_WARNING_PUSH, &(value_json->valueint), sizeof(int));
+			return -1;
+		}
+		else if(piid == IID_6_10_DistortionSwitch) {
+			log_info("IID_6_10_DistortionSwitch:%d ",value_json->valueint);
+			send_complicate_request(&msg, MSG_VIDEO_CTRL_DIRECT, SERVER_VIDEO, id, piid, siid,
+					VIDEO_CTRL_CUSTOM_DISTORTION, &(value_json->valueint), sizeof(int));
+			return -1;
 		}
 		break;
 	default:
@@ -706,6 +814,134 @@ exit:
     return ret;
 }
 
+static int miot_properties_changed(int piid,int siid,int value, char* string)
+{
+	char ackbuf[ACK_MAX];
+	int ret = -1, id = 0;
+    id =  misc_generate_random_id();
+    if(string) {
+    	sprintf(ackbuf, OT_REG_STR_TEMPLATE,id,config.device.did,siid,piid,string);
+    }
+    else {
+    	sprintf(ackbuf, OT_REG_INT_TEMPLATE,id,config.device.did,siid,piid,value);
+    }
+    ret = miio_socket_send(ackbuf, strlen(ackbuf));
+    return ret;
+}
+
+static int miio_action_func_ack(message_arg_t arg_pass, int result, int size, void *arg)
+{
+	int ret = -1;
+	char ackbuf[ACK_MAX];
+    switch(arg_pass.chick) {
+		case IID_4_MemoryCardManagement:
+			if(arg_pass.dog == IID_4_1_Format) {
+				if(!result) {
+					sprintf(ackbuf, OT_REG_OK_TEMPLATE, arg_pass.cat);
+					miot_properties_changed(IID_4_1_Status,IID_4_MemoryCardManagement,SD_CARD_OK,0);
+				}
+				else {
+					sprintf(ackbuf, OT_REG_ERR_TEMPLATE, arg_pass.cat);
+				}
+
+			}
+			else if(arg_pass.dog == IID_4_2_PopUp) {
+				if( !result ) {
+					sprintf(ackbuf, OT_REG_OK_TEMPLATE, arg_pass.cat);
+					miot_properties_changed(IID_4_1_Status,IID_4_MemoryCardManagement,SD_CARD_POPUP,0);
+				}
+				else {
+					sprintf(ackbuf, OT_REG_ERR_TEMPLATE, arg_pass.cat);
+
+				}
+			}
+			miio_socket_send(ackbuf, strlen(ackbuf));
+			break;
+		case IID_6_MoreSet:
+			if(arg_pass.dog == IID_6_1_Reboot) {
+				if(!result) {
+					sprintf(ackbuf, OT_REG_OK_TEMPLATE, arg_pass.cat);
+				}
+				else {
+					sprintf(ackbuf, OT_REG_ERR_TEMPLATE, arg_pass.cat);
+				}
+			}
+			miio_socket_send(ackbuf, strlen(ackbuf));
+			break;
+		default:
+			break;
+    }
+    return ret;
+}
+
+static int miio_action_func(int id,char *did,int siid,int aiid,cJSON *json_in)
+{
+	int ret = -1;
+    int num = id;
+    message_t msg;
+    switch(siid) {
+		case IID_4_MemoryCardManagement:
+			if(aiid == IID_4_1_Format) {
+				log_info("IID_4_1_Format");
+				send_complicate_request(&msg, MSG_DEVICE_ACTION, SERVER_DEVICE, id, aiid, siid,
+						DEVICE_ACTION_SD_FORMAT, 0, 0);
+				miot_properties_changed(IID_4_1_Status,IID_4_MemoryCardManagement,SD_CARD_FORMATING,0);
+			}
+			else if(aiid == IID_4_2_PopUp) {
+				log_info("IID_4_2_PopUp");
+				send_complicate_request(&msg, MSG_DEVICE_ACTION, SERVER_DEVICE, id, aiid, siid,
+						DEVICE_ACTION_SD_POPUP, 0, 0);
+			}
+			break;
+		case IID_6_MoreSet:
+			if(aiid == IID_6_1_Reboot) {
+				log_info("IID_6_1_Reboot");
+				send_complicate_request(&msg, MSG_KERNEL_ACTION, SERVER_KERNEL, id, aiid, siid,
+						KERNEL_ACTION_REBOOT, 0, 0);
+			}
+			break;
+		default:
+			break;
+      }
+    return ret;
+}
+
+static int miio_action(const char *msg)
+{
+    cJSON *json,*object = NULL;
+    char did[32];
+    int siid = 0,aiid = 0;
+	int ret = -1, id = 0;
+	log_info("method:action\n");
+	//get id
+	ret = json_verify_get_int(msg, "id", &id);
+	if (ret < 0) {
+		return ret;
+	}
+    json=cJSON_Parse(msg);
+    object = cJSON_GetObjectItem(json,"params");
+    if(object)
+    {
+        cJSON *item_did = cJSON_GetObjectItem(object,"did");
+        if(item_did) {
+            sprintf(did,"%s",item_did->valuestring);
+        }
+        cJSON *item_siid = cJSON_GetObjectItem(object,"siid");
+        if(item_siid) {
+            siid = item_siid->valueint;
+        }
+        cJSON *item_aiid = cJSON_GetObjectItem(object,"aiid");
+        if(item_aiid) {
+            aiid = item_aiid->valueint;
+        }
+        cJSON *item_in = cJSON_GetObjectItem(object,"in");
+        ret = miio_action_func(id,did,siid,aiid,item_in);
+    }
+    cJSON_Delete(json);
+    return ret;
+}
+
+
 static int miio_result_parse(const char *msg,int id)
 {
     log_info("msg: %s, strlen: %d",msg, (int)strlen(msg));
@@ -716,10 +952,8 @@ static int miio_event(const char *msg)
 {
 	struct json_object *new_obj, *params, *tmp_obj;
 	int code;
-
 	if (NULL == msg)
 		return -1;
-
 	new_obj = json_tokener_parse(msg);
 	if (NULL == new_obj) {
 		log_err("%s: Not in json format: %s\n", __func__, msg);
@@ -835,16 +1069,16 @@ next_level:
         ret = miio_set_properties(msg);
 	}
     else if (json_verify_method_value(msg, "method", "action", json_type_string) == 0) {
- //       ret = miio_action(msg);
+    	ret = miio_action(msg);
 	}
 	else if (json_verify_method_value(msg, "method", "miIO.ota", json_type_string) == 0) {
-//		ret = miio_ota(msg);
+		ret = ota_init(msg);
 	}
     else if (json_verify_method_value(msg, "method", "miIO.get_ota_state", json_type_string) == 0) {
-//        ret = miio_get_ota_state(msg);
+        ret = ota_get_state(msg);
 	}
     else if (json_verify_method_value(msg, "method", "miIO.get_ota_progress", json_type_string) == 0) {
-//        ret = miio_get_ota_progress(msg);
+        ret = ota_get_progress(msg);
 	}
 	else if (json_verify_method_value(msg, "method", "miIO.event", json_type_string) == 0) {
 		log_info("miIO.event: %s\n", msg);
@@ -857,10 +1091,10 @@ next_level:
 		ret = miss_rpc_process(NULL, msg, len);
 	}
 	else if (json_verify_method_value(msg, "method", "miIO.reboot", json_type_string) == 0) {
-//       ret = iot_miio_reboot(id);
+//		ret = iot_miio_reboot(id);
     }
 	else if (json_verify_method_value(msg, "method", "miIO.restore", json_type_string) == 0) {
-//        ret = iot_miio_restore(id);
+//		ret = iot_miio_restore(id);
     }
     else {
         log_err("msg:%s ,strlen: %d, len: %d\n",msg, (int)strlen(msg), len);
@@ -1257,10 +1491,8 @@ static int server_message_proc(void)
 	int ret = 0, ret1 = 0;
 	message_t msg;
 	message_t send_msg;
-	message_arg_t *rd;
 	msg_init(&msg);
 	msg_init(&send_msg);
-	int st;
 	ret = pthread_rwlock_wrlock(&message.lock);
 	if(ret)	{
 		log_err("add message lock fail, ret = %d\n", ret);
@@ -1292,21 +1524,34 @@ static int server_message_proc(void)
 	case MSG_MANAGER_TIMER_ACK:
 		((HANDLER)msg.arg_in.handler)();
 		break;
+	case MSG_MIIO_SOCKET_SEND:
+		miio_socket_send(msg.arg, msg.arg_size);
+		break;
 	case MSG_MIIO_RPC_SEND:
-		rpc_send_msg(msg.uid, msg.extra, msg.arg);
+		rpc_send_msg(msg.arg_in.cat, msg.extra, msg.arg);
 		break;
 	case MSG_MIIO_RPC_REPORT_SEND:
-		rpc_send_report(msg.uid, msg.extra, msg.arg);
+		rpc_send_report(msg.arg_in.cat, msg.extra, msg.arg);
 		break;
 	case MSG_VIDEO_GET_PARA_ACK:
 	case MSG_DEVICE_GET_PARA_ACK:
 		miio_get_properties_callback(msg.arg_pass,msg.result, msg.arg_size, msg.arg);
 		break;
+	case MSG_VIDEO_CTRL_ACK:
 	case MSG_VIDEO_CTRL_EXT_ACK:
 	case MSG_VIDEO_CTRL_DIRECT_ACK:
 	case MSG_VIDEO_START_ACK:
 	case MSG_VIDEO_STOP_ACK:
 		miio_set_properties_callback(msg.arg_pass,msg.result, msg.arg_size, msg.arg);
+		break;
+	case MSG_DEVICE_ACTION_ACK:
+		miio_action_func_ack(msg.arg_pass, msg.result, msg.arg_size, msg.arg);
+		break;
+	case MSG_KERNEL_OTA_REPORT:
+		ota_proc(msg.arg_in.cat, msg.arg_in.dog, msg.arg_in.duck);
+		break;
+	case MSG_KERNEL_OTA_REQUEST_ACK:
+		ota_get_state_ack(msg.arg_in.duck, msg.arg_pass.cat, msg.arg_in.cat, msg.arg_in.dog);
 		break;
 	}
 	msg_free(&msg);
@@ -1466,6 +1711,7 @@ static void *server_func(void)
 /*
  * internal interface
  */
+
 int miio_send_to_cloud(char *buf, int size)
 {
 	return miio_socket_send(buf,size);

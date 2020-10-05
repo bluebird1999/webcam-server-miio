@@ -26,12 +26,6 @@
 
 #define IID_3_IndicatorLight                                                  3
 #define IID_3_1_On                                                            1
-#define IID_3_2_Mode                                                          2
-#define IID_3_3_Brightness                                                    3
-#define IID_3_4_Color                                                         4
-#define IID_3_5_ColorTemperature                                              5
-#define IID_3_6_Flow                                                          6
-#define IID_3_7_Saturability                                                  7
 
 #define IID_4_MemoryCardManagement                                            4
 #define IID_4_1_Status                                                        1
@@ -48,6 +42,18 @@
 #define IID_5_4_MotionDetectionStartTime                                      4
 #define IID_5_5_MotionDetectionEndTime                                        5
 
+#define IID_6_MoreSet                                                         6
+#define IID_6_1_Ipaddr                                                        1
+#define IID_6_2_MacAddr                                                       2
+#define IID_6_3_WifiName                                                      3
+#define IID_6_4_WifiRssi                                                      4
+#define IID_6_5_CurrentMode                                                   5
+#define IID_6_6_TimeZone                                                      6
+#define IID_6_7_StorageSwitch                                                 7
+#define IID_6_8_CloudUploadEnable                                             8
+#define IID_6_9_MotionAlarmPush                                               9
+#define IID_6_10_DistortionSwitch                                             10
+#define IID_6_1_Reboot                                                        1
 /*
  * structure
  */

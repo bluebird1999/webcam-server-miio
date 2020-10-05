@@ -13,7 +13,7 @@
  * header
  */
 #include <stdio.h>
-
+#include <poll.h>
 /*
  * define
  */
@@ -23,6 +23,7 @@
 #define	MIIO_CLIENT_AGENT_FILE		"miio_client"
 #define	MIIO_CLIENT_HELPER_FILE		"miio_helper"
 
+#define	ACK_MAX						1024
 #define BUFFER_MAX  				4096
 #define MIIO_IP      				"127.0.0.1"
 #define MIIO_PORT    				54322
@@ -36,10 +37,13 @@
 #define OT_UP_PWD_TEMPLATE 			"{\"id\":%d,\"method\":\"props\",\"params\":{\"p2p_id\":\"%s\",\"p2p_password\":\"%s\", \"p2p_checktoken\":\"%s\", \"p2p_dev_public_key\":\"%s\"}}"
 #define OT_UP_SYS_STATUS_TEMPLATE 	"{\"id\":%d,\"method\":\"props\",\"params\":{\"power\":\"%s\"}}"
 #define OT_GET_P2P_ID_TEMPLATE 		"{\"id\":%d,\"method\":\"_sync.get_p2p_id\",\"params\":{}}"
+#define	OT_REG_OK_TEMPLATE			"{\"id\": %d,\"result\" : {\"code\" : 0,\"out\" : []}}"
+#define OT_REG_ERR_TEMPLATE			"{\"id\": %d,\"result\" : {\"code\" : -4004}}"
+#define OT_REG_INT_TEMPLATE			"{\"id\": %d,\"method\": \"properties_changed\",\"params\":\
+									[{\"did\" : \"%s\",\"siid\" : %d,\"piid\" : %d,\"value\" : %d}]}"
+#define OT_REG_STR_TEMPLATE			"{\"id\": %d,\"method\": \"properties_changed\",\"params\":\
+									[{\"did\" : \"%s\",\"siid\" : %d,\"piid\" : %d,\"value\" : \"%s\"}]}"
 
-#define	CALLBACK_OWN					0		//callback for only usage
-#define	CALLBACK_MIIO_GET_PROPERTY		1		//send back property
-#define	CALLBACK_MIIO_SET_RPOPERTY		2		//send back property set result
 
 /*
  * structure
@@ -83,6 +87,5 @@ typedef struct miio_info_t {
  * function
  */
 int miio_send_to_cloud(char *buf, int size);
-
 
 #endif /* SERVER_MIIO_MIIO_H_ */
