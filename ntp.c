@@ -19,9 +19,10 @@
 #include <limits.h>
 #include <time.h>
 #include <json-c/json.h>
+#include <malloc.h>
+#include <dmalloc.h>
 //program header
-#include "../../tools/json/json.h"
-#include "../../tools/log.h"
+#include "../../tools/tools_interface.h"
 //server header
 #include "ntp.h"
 

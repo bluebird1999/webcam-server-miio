@@ -150,13 +150,15 @@ int ota_get_state(const char *msg)
         return ret;
     }
     /********message body********/
+/* wait for other server
 	message_t message;
 	msg_init(&message);
 	message.message = MSG_KERNEL_OTA_REQUEST;
 	message.sender = message.receiver = SERVER_MIIO;
 	message.arg_in.duck = id;
 	message.arg_pass.cat = OTA_INFO_STATUS;
-//	server_kernel_message(&message);
+	server_kernel_message(&message);
+*/
 	/***************************/
     return ret;
 }
@@ -170,13 +172,15 @@ int ota_get_progress(const char *msg)
         return ret;
     }
     /********message body********/
+/* wait for other server
 	message_t message;
 	msg_init(&message);
 	message.message = MSG_KERNEL_OTA_REQUEST;
 	message.sender = message.receiver = SERVER_MIIO;
 	message.arg_in.duck = id;
 	message.arg_pass.cat = OTA_INFO_PROGRESS;
-//	server_kernel_message(&message);
+	server_kernel_message(&message);
+*/
 	/***************************/
     return ret;
 }
@@ -214,13 +218,15 @@ int ota_proc(int status, int progress, int id)
 		}
     }
     /********message body********/
+/* wait for other server
 	message_t message;
 	msg_init(&message);
 	message.message = MSG_KERNEL_OTA_REPORT_ACK;
 	message.sender = message.receiver = SERVER_MIIO;
 	message.arg_in.duck = id;
 	message.result = ret;
-//	server_kernel_message(&message);
+	server_kernel_message(&message);
+*/
 	/***************************/
     return ret;
 }
@@ -299,6 +305,7 @@ int ota_init(const char *msg)
 //
 	msg_id = misc_generate_random_id();
     /********message body********/
+/* wait for other server
 	message_t message;
 	msg_init(&message);
 	message.message = MSG_KERNEL_OTA_DOWNLOAD;
@@ -311,7 +318,8 @@ int ota_init(const char *msg)
 	message.arg_size = strlen(config.url);
 	message.extra = config.md5;
 	message.extra_size = strlen(config.md5);
-//	server_kernel_message(&message);
+	server_kernel_message(&message);
+*/
 	/***************************/
     root_ack=cJSON_CreateObject();
     item_id = cJSON_CreateNumber(id);

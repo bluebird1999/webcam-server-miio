@@ -30,15 +30,17 @@
 #include <pthread.h>
 #include <json-c/json.h>
 #include <miss.h>
+#include <malloc.h>
+#include <dmalloc.h>
 //program header
 #include "../../tools/tools_interface.h"
-#include "../../server/config/config_miio_interface.h"
-#include "../../server/config/config_video_interface.h"
 #include "../../server/miss/miss_local.h"
 #include "../../server/miss/miss_interface.h"
 #include "../../manager/manager_interface.h"
-#include "../../server/config/config_interface.h"
 #include "../../server/video/video_interface.h"
+#include "../../server/audio/audio_interface.h"
+#include "../../server/recorder/recorder_interface.h"
+#include "../../server/device/device_interface.h"
 //server header
 #include "mi.h"
 #include "miio.h"
@@ -46,6 +48,7 @@
 #include "miio_message.h"
 #include "ntp.h"
 #include "ota.h"
+#include "config.h"
 
 /*
  * static
@@ -57,25 +60,12 @@ static miio_config_t		config;
 static miio_info_t			miio_info;
 static int					message_id;
 static struct msg_helper_t 	msg_helper;
-static int					thread_start;
-static int					thread_exit;
 
 //function
 //common
 static void *server_func(void);
 static int server_message_proc(void);
-static int server_none(void);
-static int server_wait(void);
-static int server_setup(void);
-static int server_idle(void);
-static int server_start(void);
-static int server_run(void);
-static int server_stop(void);
-static int server_restart(void);
-static int server_error(void);
 static int server_release(void);
-static int server_set_thread_start(int index);
-static int server_set_thread_exit(int index);
 static int server_get_status(int type);
 static int server_set_status(int type, int st);
 static void server_thread_termination(void);
@@ -102,8 +92,7 @@ static int rpc_send_msg(int msg_id, const char *method, const char *params);
 static int rpc_send_report(int msg_id, const char *method, const char *params);
 static int miio_get_properties_callback(message_arg_t arg_pass, int result, int size, void *arg);
 static int miio_set_properties_callback(message_arg_t arg_pass, int result, int size, void *arg);
-static int send_config_save(message_t *msg, int module, void *arg, int size);
-static int send_complicate_request(message_t *msg, int message, int receiver, int id, int piid, int siid, int module, void *arg, int size);
+static int send_complicate_request(message_t *msg, int message, int receiver, int id, int piid, int siid, int module, void *arg, int size, void* func);
 static int miio_action(const char *msg);
 static int miio_action_func(int id,char *did,int siid,int aiid,cJSON *json_in);
 static int miio_action_func_ack(message_arg_t arg_pass, int result, int size, void *arg);
@@ -118,7 +107,7 @@ static int miot_properties_changed(int piid,int siid,int value, char* string);
 /*
  * helper
  */
-static int send_complicate_request(message_t *msg, int message, int receiver, int id, int piid, int siid, int module, void *arg, int size)
+static int send_complicate_request(message_t *msg, int message, int receiver, int id, int piid, int siid, int module, void *arg, int size, void* func)
 {
 	/********message body********/
 	msg->message = message;
@@ -126,13 +115,14 @@ static int send_complicate_request(message_t *msg, int message, int receiver, in
 	msg->arg_pass.cat = id;
 	msg->arg_pass.dog = piid;
 	msg->arg_pass.chick = siid;
+	msg->arg_pass.handler = func;
 	msg->arg_in.cat = module;
 	msg->arg = arg;
 	msg->arg_size = size;
 	/****************************/
 	switch(receiver) {
 	case SERVER_DEVICE:
-//		server_device_message(msg);
+		server_device_message(msg);
 		break;
 	case SERVER_VIDEO:
 		server_video_message(msg);
@@ -140,22 +130,10 @@ static int send_complicate_request(message_t *msg, int message, int receiver, in
 	case SERVER_KERNEL:
 //		server_kernel_message(msg);
 		break;
+	case SERVER_RECORDER:
+		server_recorder_message(msg);
+		break;
 	}
-}
-
-static int send_config_save(message_t *msg, int module, void *arg, int size)
-{
-	int ret=0;
-	/********message body********/
-	msg_init(msg);
-	msg->message = MSG_CONFIG_WRITE;
-	msg->sender = msg->receiver = SERVER_MIIO;
-	msg->arg_in.cat = module;
-	msg->arg = arg;
-	msg->arg_size = size;
-	ret = server_config_message(msg);
-	/********message body********/
-	return ret;
 }
 
 static int miio_routine_1000ms(void)
@@ -176,16 +154,6 @@ static int miio_routine_1000ms(void)
 		manager_message(&msg);
 	}
 	return ret;
-}
-
-static int server_set_thread_exit(int index)
-{
-	thread_exit |= (1<<index);
-}
-
-static int server_set_thread_start(int index)
-{
-	thread_start |= (1<<index);
 }
 
 static int miio_socket_init(void)
@@ -259,7 +227,6 @@ static void miio_request_local_status(void)
 static int miio_get_properties_callback(message_arg_t arg_pass, int result, int size, void *arg)
 {
     cJSON *item_id,*item_result = NULL,*item_result_param1 = NULL; //ack msg
-    video_iot_config_t *tmp;
     cJSON *root_ack = 0;
     int ret = -1;
 	char *ackbuf = 0;
@@ -284,14 +251,13 @@ static int miio_get_properties_callback(message_arg_t arg_pass, int result, int 
     switch(arg_pass.chick) {
 		case IID_2_CameraControl:
 			if( !result ) {
-				tmp = (video_iot_config_t*)arg;
-				if( arg_pass.dog == IID_2_1_On) item = cJSON_CreateNumber(tmp->on);
-				else if( arg_pass.dog == IID_2_2_ImageRollover) item = cJSON_CreateNumber(tmp->image_roll);
-				else if( arg_pass.dog == IID_2_3_NightShot) item = cJSON_CreateNumber(tmp->night);
-				else if( arg_pass.dog == IID_2_4_TimeWatermark) item = cJSON_CreateNumber(tmp->watermark);
-				else if( arg_pass.dog == IID_2_5_WdrMode) item = cJSON_CreateNumber(tmp->wdr);
-				else if( arg_pass.dog == IID_2_6_GlimmerFullColor) item = cJSON_CreateNumber(tmp->glimmer);
-				else if( arg_pass.dog == IID_2_7_RecordingMode) item = cJSON_CreateNumber(tmp->recording);
+				if( arg_pass.dog == IID_2_1_On ) item = cJSON_CreateNumber(((video_iot_config_t*)arg)->on);
+				else if( arg_pass.dog == IID_2_2_ImageRollover) item = cJSON_CreateNumber(((video_iot_config_t*)arg)->image_roll);
+				else if( arg_pass.dog == IID_2_3_NightShot) item = cJSON_CreateNumber(((video_iot_config_t*)arg)->night);
+				else if( arg_pass.dog == IID_2_4_TimeWatermark) item = cJSON_CreateNumber(((video_iot_config_t*)arg)->watermark);
+				else if( arg_pass.dog == IID_2_5_WdrMode) item = cJSON_CreateNumber(((video_iot_config_t*)arg)->wdr);
+				else if( arg_pass.dog == IID_2_6_GlimmerFullColor) item = cJSON_CreateNumber(((video_iot_config_t*)arg)->glimmer);
+				else if( arg_pass.dog == IID_2_7_RecordingMode) item = cJSON_CreateNumber(((recorder_iot_config_t*)arg)->recording_mode);
 				cJSON_AddItemToObject(item_result_param1,"value",item);
 				item = cJSON_CreateNumber(0);
 				cJSON_AddItemToObject(item_result_param1,"code",item);
@@ -317,13 +283,10 @@ static int miio_get_properties_callback(message_arg_t arg_pass, int result, int 
 			break;
 		case IID_4_MemoryCardManagement:
 			if( !result ) {
-/*
-				tmp = (device_iot_config_t*)arg;
-				if( arg_pass.dog == IID_4_1_Status) item = cJSON_CreateNumber(tmp->on);
-				else if( arg_pass.dog == IID_4_2_StorageTotalSpace) item = cJSON_CreateNumber(tmp->image_roll);
-				else if( arg_pass.dog == IID_4_3_StorageFreeSpace) item = cJSON_CreateNumber(tmp->night);
-				else if( arg_pass.dog == IID_4_4_StorageUsedSpace) item = cJSON_CreateNumber(tmp->watermark);
-*/
+				if( arg_pass.dog == IID_4_1_Status) item = cJSON_CreateNumber( ((device_iot_config_t*)arg)->sd_iot_info.plug );
+				else if( arg_pass.dog == IID_4_2_StorageTotalSpace) item = cJSON_CreateNumber( ((device_iot_config_t*)arg)->sd_iot_info.totalBytes * 1024 );
+				else if( arg_pass.dog == IID_4_3_StorageFreeSpace) item = cJSON_CreateNumber( ((device_iot_config_t*)arg)->sd_iot_info.freeBytes * 1024 );
+				else if( arg_pass.dog == IID_4_4_StorageUsedSpace) item = cJSON_CreateNumber( ((device_iot_config_t*)arg)->sd_iot_info.usedBytes * 1024 );
 				cJSON_AddItemToObject(item_result_param1,"value",item);
 				item = cJSON_CreateNumber(0);
 				cJSON_AddItemToObject(item_result_param1,"code",item);
@@ -335,12 +298,11 @@ static int miio_get_properties_callback(message_arg_t arg_pass, int result, int 
 			break;
 		case IID_5_MotionDetection:
 			if( !result ) {
-				tmp = (video_iot_config_t*)arg;
-				if( arg_pass.dog == IID_5_1_MotionDetection) item = cJSON_CreateNumber(tmp->motion_switch);
-				else if( arg_pass.dog == IID_5_2_AlarmInterval) item = cJSON_CreateNumber(tmp->motion_alarm);
-				else if( arg_pass.dog == IID_5_3_DetectionSensitivity) item = cJSON_CreateNumber(tmp->motion_sensitivity);
-				else if( arg_pass.dog == IID_5_4_MotionDetectionStartTime) item = cJSON_CreateString(tmp->motion_start);
-				else if( arg_pass.dog == IID_5_5_MotionDetectionEndTime) item = cJSON_CreateString(tmp->motion_end);
+				if( arg_pass.dog == IID_5_1_MotionDetection) item = cJSON_CreateNumber(((video_iot_config_t*)arg)->motion_switch);
+				else if( arg_pass.dog == IID_5_2_AlarmInterval) item = cJSON_CreateNumber(((video_iot_config_t*)arg)->motion_alarm);
+				else if( arg_pass.dog == IID_5_3_DetectionSensitivity) item = cJSON_CreateNumber(((video_iot_config_t*)arg)->motion_sensitivity);
+				else if( arg_pass.dog == IID_5_4_MotionDetectionStartTime) item = cJSON_CreateString(((video_iot_config_t*)arg)->motion_start);
+				else if( arg_pass.dog == IID_5_5_MotionDetectionEndTime) item = cJSON_CreateString(((video_iot_config_t*)arg)->motion_end);
 				cJSON_AddItemToObject(item_result_param1,"value",item);
 				item = cJSON_CreateNumber(0);
 				cJSON_AddItemToObject(item_result_param1,"code",item);
@@ -383,21 +345,14 @@ static int miio_get_properties_callback(message_arg_t arg_pass, int result, int 
 */
 				}
 				else if(arg_pass.dog == IID_6_7_StorageSwitch) {
-					tmp = (video_iot_config_t*)arg;
-					item = cJSON_CreateNumber(tmp->custom_local_save);
+					item = cJSON_CreateNumber(((recorder_iot_config_t*)arg)->local_save);
 				}
 				else if(arg_pass.dog == IID_6_8_CloudUploadEnable) {
-					tmp = (video_iot_config_t*)arg;
-					item = cJSON_CreateNumber(tmp->custom_cloud_save);
+//					tmp = (micloud_iot_config_t*)arg;
+//					item = cJSON_CreateNumber(tmp->custom_cloud_save);
 				}
-				else if(arg_pass.dog == IID_6_9_MotionAlarmPush) {
-					tmp = (video_iot_config_t*)arg;
-					item = cJSON_CreateNumber(tmp->custom_warning_push);
-				}
-				else if(arg_pass.dog == IID_6_10_DistortionSwitch) {
-					tmp = (video_iot_config_t*)arg;
-					item = cJSON_CreateNumber(tmp->custom_distortion);
-				}
+				else if(arg_pass.dog == IID_6_9_MotionAlarmPush) item = cJSON_CreateNumber(((video_iot_config_t*)arg)->custom_warning_push);
+				else if(arg_pass.dog == IID_6_10_DistortionSwitch) item = cJSON_CreateNumber(((video_iot_config_t*)arg)->custom_distortion);
 				cJSON_AddItemToObject(item_result_param1,"value",item);
 				item = cJSON_CreateNumber(0);
 				cJSON_AddItemToObject(item_result_param1,"code",item);
@@ -464,27 +419,36 @@ static int miio_get_properties_vlaue(int id,char *did,int piid,int siid,cJSON *j
 		}
 		case IID_2_CameraControl:
 		case IID_5_MotionDetection:
-			send_complicate_request(&msg, MSG_VIDEO_GET_PARA, SERVER_VIDEO, id, piid, siid, 0, 0, 0);
+			send_complicate_request(&msg, MSG_VIDEO_GET_PARA, SERVER_VIDEO, id, piid, siid, 0, 0, 0, miio_get_properties_callback);
 			return -1;
 		case IID_3_IndicatorLight:
 		case IID_4_MemoryCardManagement:
-			send_complicate_request(&msg, MSG_DEVICE_GET_PARA, SERVER_DEVICE, id, piid, siid,0, 0, 0);
+			send_complicate_request(&msg, MSG_DEVICE_GET_PARA, SERVER_DEVICE, id, piid, siid, DEVICE_CTRL_SD_INFO, 0, 0,miio_get_properties_callback);
 			return -1;
 		case IID_6_MoreSet:
-			if( 	(piid == IID_6_1_Ipaddr) || (piid == IID_6_2_MacAddr) || (piid == IID_6_3_WifiName) ||
+			if(	(piid == IID_6_9_MotionAlarmPush) || (piid == IID_6_10_DistortionSwitch) ) {
+				send_complicate_request(&msg, MSG_VIDEO_GET_PARA, SERVER_VIDEO, id, piid, siid, 0, 0, 0,miio_get_properties_callback);
+				return -1;
+			}
+			else if( piid == IID_6_7_StorageSwitch ) {
+				send_complicate_request(&msg, MSG_RECORDER_GET_PARA, SERVER_RECORDER, id, piid, siid, 0, 0, 0,miio_get_properties_callback);
+				return -1;
+			}
+/* wait for other server
+			else if( piid == IID_6_8_CloudUploadEnable ) {
+				send_complicate_request(&msg, MSG_MICLOUD_GET_PARA, SERVER_MICLOUD, id, piid, siid, 0, 0, 0,miio_get_properties_callback);
+				return -1;
+			}
+			else if( 	(piid == IID_6_1_Ipaddr) || (piid == IID_6_2_MacAddr) || (piid == IID_6_3_WifiName) ||
 					(piid == IID_6_4_WifiRssi) || (piid == IID_6_5_CurrentMode) ) {
-				send_complicate_request(&msg, MSG_DEVICE_GET_PARA, SERVER_DEVICE, id, piid, siid, 0, 0, 0);
+				send_complicate_request(&msg, MSG_KERNEL_GET_PARA, SERVER_KERNEL, id, piid, siid, 0, 0, 0,miio_get_properties_callback);
 				return -1;
 			}
 			else if(piid == IID_6_6_TimeZone) {
-				send_complicate_request(&msg, MSG_KERNEL_GET_PARA, SERVER_KERNEL, id, piid, siid, 0, 0, 0);
+				send_complicate_request(&msg, MSG_KERNEL_GET_PARA, SERVER_KERNEL, id, piid, siid, 0, 0, 0,miio_get_properties_callback);
 				return -1;
 			}
-			else if(	(piid == IID_6_7_StorageSwitch) || (piid == IID_6_8_CloudUploadEnable) ||
-					(piid == IID_6_9_MotionAlarmPush) || (piid == IID_6_10_DistortionSwitch) ) {
-				send_complicate_request(&msg, MSG_VIDEO_GET_PARA, SERVER_VIDEO, id, piid, siid, 0, 0, 0);
-				return -1;
-			}
+*/
 			break;
 		default:
 			return -1;
@@ -618,45 +582,45 @@ static int miio_set_properties_vlaue(int id, char *did, int piid, int siid, cJSO
 		if(piid == IID_2_1_On) {
             log_info("IID_2_1_On:%d ",value_json->valueint);
             if( value_json->valueint == 1)
-            	send_complicate_request(&msg, MSG_VIDEO_START, SERVER_VIDEO, id, piid, siid, 0, 0, 0);
+            	send_complicate_request(&msg, MSG_VIDEO_START, SERVER_VIDEO, id, piid, siid, 0, 0, 0,miio_set_properties_callback);
             else
-    			send_complicate_request(&msg, MSG_VIDEO_STOP, SERVER_VIDEO, id, piid, siid, 0, 0, 0);
+    			send_complicate_request(&msg, MSG_VIDEO_STOP, SERVER_VIDEO, id, piid, siid, 0, 0, 0,miio_set_properties_callback);
 			return -1;
 		}
 		else if(piid == IID_2_2_ImageRollover) {
             log_info("IID_2_2_ImageRollover:%d \n",value_json->valueint);
 			send_complicate_request(&msg, MSG_VIDEO_CTRL_EXT, SERVER_VIDEO, id, piid, siid,
-					VIDEO_CTRL_IMAGE_ROLLOVER, &(value_json->valueint), sizeof(int));
+					VIDEO_CTRL_IMAGE_ROLLOVER, &(value_json->valueint), sizeof(int),miio_set_properties_callback);
 			return -1;
 		}
 		else if(piid == IID_2_3_NightShot) {
 			log_info("IID_2_3_NightShot:%d ",value_json->valueint);
 			send_complicate_request(&msg, MSG_VIDEO_CTRL_DIRECT, SERVER_VIDEO, id, piid, siid,
-					VIDEO_CTRL_NIGHT_SHOT, &(value_json->valueint), sizeof(int));
+					VIDEO_CTRL_NIGHT_SHOT, &(value_json->valueint), sizeof(int),miio_set_properties_callback);
 			return -1;
 		}
 		else if(piid == IID_2_4_TimeWatermark) {
 			log_info("IID_2_4_TimeWatermark:%d ",value_json->valueint);
     		send_complicate_request(&msg, MSG_VIDEO_CTRL_EXT, SERVER_VIDEO, id, piid, siid,
-    				VIDEO_CTRL_TIME_WATERMARK, &(value_json->valueint), sizeof(int));
+    				VIDEO_CTRL_TIME_WATERMARK, &(value_json->valueint), sizeof(int),miio_set_properties_callback);
     		return -1;
 		}
 		else if(piid == IID_2_5_WdrMode) {
 			log_info("IID_2_5_WdrMode:%d ",value_json->valueint);
 			send_complicate_request(&msg, MSG_VIDEO_CTRL_DIRECT, SERVER_VIDEO, id, piid, siid,
-					VIDEO_CTRL_WDR_MODE, &(value_json->valueint), sizeof(int));
+					VIDEO_CTRL_WDR_MODE, &(value_json->valueint), sizeof(int),miio_set_properties_callback);
 			return -1;
 		}
 		else if(piid == IID_2_6_GlimmerFullColor) {
 			log_info("IID_2_6_GlimmerFullColor:%d ",value_json->valueint);
 			send_complicate_request(&msg, MSG_VIDEO_CTRL_DIRECT, SERVER_VIDEO, id, piid, siid,
-					VIDEO_CTRL_GLIMMER_FULL_COLOR, &(value_json->valueint), sizeof(int));
+					VIDEO_CTRL_GLIMMER_FULL_COLOR, &(value_json->valueint), sizeof(int),miio_set_properties_callback);
 			return -1;
 		}
 		else if(piid == IID_2_7_RecordingMode) {
 			log_info("IID_2_7_RecordingMode:%d ",value_json->valueint);
-			send_complicate_request(&msg, MSG_VIDEO_CTRL_DIRECT, SERVER_VIDEO, id, piid, siid,
-					VIDEO_CTRL_RECORDING_MODE, &(value_json->valueint), sizeof(int));
+			send_complicate_request(&msg, MSG_RECORDER_CTRL_DIRECT, SERVER_RECORDER, id, piid, siid,
+					RECORDER_CTRL_RECORDING_MODE, &(value_json->valueint), sizeof(int),miio_set_properties_callback);
 			return -1;
 		}
 
@@ -665,7 +629,7 @@ static int miio_set_properties_vlaue(int id, char *did, int piid, int siid, cJSO
 		if(piid == IID_3_1_On) {
 			log_info("IID_3_1_On:%d ",value_json->valueint);
 /*			send_complicate_request(&msg, MSG_DEVICE_CTRL_DIRECT, SERVER_DEVICE, id, piid, siid,
-					DEVICE_CTRL_INDICATOR_SWITCH, &(value_json->valueint), sizeof(int));
+					DEVICE_CTRL_INDICATOR_SWITCH, &(value_json->valueint), sizeof(int),miio_set_properties_callback);
 */
 			return -1;
 		}
@@ -676,31 +640,31 @@ static int miio_set_properties_vlaue(int id, char *did, int piid, int siid, cJSO
 		if(piid == IID_5_1_MotionDetection) {
 			log_info("IID_5_1_MotionDetection:%d ",value_json->valueint);
     		send_complicate_request(&msg, MSG_VIDEO_CTRL, SERVER_VIDEO, id, piid, siid,
-    				VIDEO_CTRL_MOTION_SWITCH, &(value_json->valueint), sizeof(int) );
+    				VIDEO_CTRL_MOTION_SWITCH, &(value_json->valueint), sizeof(int) ,miio_set_properties_callback);
     		return -1;
 		}
 		else if(piid == IID_5_2_AlarmInterval) {
 			log_info("IID_5_2_AlarmInterval:%d ",value_json->valueint);
     		send_complicate_request(&msg, MSG_VIDEO_CTRL, SERVER_VIDEO, id, piid, siid,
-    				VIDEO_CTRL_MOTION_ALARM_INTERVAL, &(value_json->valueint), sizeof(int) );
+    				VIDEO_CTRL_MOTION_ALARM_INTERVAL, &(value_json->valueint), sizeof(int) ,miio_set_properties_callback);
     		return -1;
 		}
 		else if(piid == IID_5_3_DetectionSensitivity) {
 			log_info("IID_5_3_DetectionSensitivity:%d ",value_json->valueint);
     		send_complicate_request(&msg, MSG_VIDEO_CTRL, SERVER_VIDEO, id, piid, siid,
-    				VIDEO_CTRL_MOTION_SENSITIVITY, &(value_json->valueint), sizeof(int) );
+    				VIDEO_CTRL_MOTION_SENSITIVITY, &(value_json->valueint), sizeof(int) ,miio_set_properties_callback);
     		return -1;
 		}
 		else if(piid == IID_5_4_MotionDetectionStartTime) {
 			log_info("IID_5_4_MotionDetectionStartTime:%s ",value_json->valuestring);
     		send_complicate_request(&msg, MSG_VIDEO_CTRL_DIRECT, SERVER_VIDEO, id, piid, siid,
-    				VIDEO_CTRL_MOTION_START, value_json->valuestring, strlen(value_json->valuestring)+1 );
+    				VIDEO_CTRL_MOTION_START, value_json->valuestring, strlen(value_json->valuestring)+1 ,miio_set_properties_callback);
     		return -1;
 		}
 		else if(piid == IID_5_5_MotionDetectionEndTime) {
 			log_info("IID_5_4_MotionDetectionEndTime:%s ",value_json->valuestring);
     		send_complicate_request(&msg, MSG_VIDEO_CTRL, SERVER_VIDEO, id, piid, siid,
-    				VIDEO_CTRL_MOTION_END, value_json->valuestring, strlen(value_json->valuestring)+1 );
+    				VIDEO_CTRL_MOTION_END, value_json->valuestring, strlen(value_json->valuestring)+1 ,miio_set_properties_callback);
     		return -1;
 		}
 		break;
@@ -708,32 +672,32 @@ static int miio_set_properties_vlaue(int id, char *did, int piid, int siid, cJSO
 		if(piid == IID_6_6_TimeZone) {
 			log_info("IID_6_6_TimeZone:%d ",value_json->valueint);
 /*			send_complicate_request(&msg, MSG_KERNEL_CTRL_DIRECT, SERVER_KERNEL, id, piid, siid,
-					KERNEL_CTRL_TIMEZONE, &(value_json->valueint), sizeof(int));
+					KERNEL_CTRL_TIMEZONE, &(value_json->valueint), sizeof(int),miio_set_properties_callback);
 */
 			return -1;
 		}
 		else if(piid == IID_6_7_StorageSwitch) {
 			log_info("IID_6_7_StorageSwitch:%d ",value_json->valueint);
-			send_complicate_request(&msg, MSG_VIDEO_CTRL_DIRECT, SERVER_VIDEO, id, piid, siid,
-					VIDEO_CTRL_CUSTOM_LOCAL_SAVE, &(value_json->valueint), sizeof(int));
+			send_complicate_request(&msg, MSG_RECORDER_CTRL_DIRECT, SERVER_RECORDER, id, piid, siid,
+					RECORDER_CTRL_LOCAL_SAVE, &(value_json->valueint), sizeof(int),miio_set_properties_callback);
 			return -1;
 		}
 		else if(piid == IID_6_8_CloudUploadEnable) {
 			log_info("IID_6_8_CloudUploadEnable:%d ",value_json->valueint);
-			send_complicate_request(&msg, MSG_VIDEO_CTRL_DIRECT, SERVER_VIDEO, id, piid, siid,
-					VIDEO_CTRL_CUSTOM_CLOUD_SAVE, &(value_json->valueint), sizeof(int));
+//			send_complicate_request(&msg, MSG_MICLOUD_CTRL_DIRECT, SERVER_MICLOUD, id, piid, siid,
+//					MICLOUD_CTRL_CLOUD_SAVE, &(value_json->valueint), sizeof(int),miio_set_properties_callback);
 			return -1;
 		}
 		else if(piid == IID_6_9_MotionAlarmPush) {
 			log_info("IID_6_9_MotionAlarmPush:%d ",value_json->valueint);
 			send_complicate_request(&msg, MSG_VIDEO_CTRL, SERVER_VIDEO, id, piid, siid,
-					VIDEO_CTRL_CUSTOM_WARNING_PUSH, &(value_json->valueint), sizeof(int));
+					VIDEO_CTRL_CUSTOM_WARNING_PUSH, &(value_json->valueint), sizeof(int),miio_set_properties_callback);
 			return -1;
 		}
 		else if(piid == IID_6_10_DistortionSwitch) {
 			log_info("IID_6_10_DistortionSwitch:%d ",value_json->valueint);
 			send_complicate_request(&msg, MSG_VIDEO_CTRL_DIRECT, SERVER_VIDEO, id, piid, siid,
-					VIDEO_CTRL_CUSTOM_DISTORTION, &(value_json->valueint), sizeof(int));
+					VIDEO_CTRL_CUSTOM_DISTORTION, &(value_json->valueint), sizeof(int),miio_set_properties_callback);
 			return -1;
 		}
 		break;
@@ -838,14 +802,14 @@ static int miio_action_func_ack(message_arg_t arg_pass, int result, int size, vo
 			if(arg_pass.dog == IID_4_1_Format) {
 				if(!result) {
 					sprintf(ackbuf, OT_REG_OK_TEMPLATE, arg_pass.cat);
-					miot_properties_changed(IID_4_1_Status,IID_4_MemoryCardManagement,SD_CARD_OK,0);
+//					miot_properties_changed(IID_4_1_Status,IID_4_MemoryCardManagement,SD_CARD_OK,0);
 				}
 				else {
 					sprintf(ackbuf, OT_REG_ERR_TEMPLATE, arg_pass.cat);
 				}
 
 			}
-			else if(arg_pass.dog == IID_4_2_PopUp) {
+/*			else if(arg_pass.dog == IID_4_2_PopUp) {
 				if( !result ) {
 					sprintf(ackbuf, OT_REG_OK_TEMPLATE, arg_pass.cat);
 					miot_properties_changed(IID_4_1_Status,IID_4_MemoryCardManagement,SD_CARD_POPUP,0);
@@ -855,6 +819,7 @@ static int miio_action_func_ack(message_arg_t arg_pass, int result, int size, vo
 
 				}
 			}
+*/
 			miio_socket_send(ackbuf, strlen(ackbuf));
 			break;
 		case IID_6_MoreSet:
@@ -883,23 +848,25 @@ static int miio_action_func(int id,char *did,int siid,int aiid,cJSON *json_in)
 		case IID_4_MemoryCardManagement:
 			if(aiid == IID_4_1_Format) {
 				log_info("IID_4_1_Format");
-				send_complicate_request(&msg, MSG_DEVICE_ACTION, SERVER_DEVICE, id, aiid, siid,
-						DEVICE_ACTION_SD_FORMAT, 0, 0);
-				miot_properties_changed(IID_4_1_Status,IID_4_MemoryCardManagement,SD_CARD_FORMATING,0);
+				send_complicate_request(&msg, DEVICE_ACTION_SD_FORMAT, SERVER_DEVICE, id, aiid, siid,
+						DEVICE_ACTION_SD_FORMAT, 0, 0, miio_action_func_ack);
+//				miot_properties_changed(IID_4_1_Status,IID_4_MemoryCardManagement,SD_CARD_FORMATING,0);
 			}
-			else if(aiid == IID_4_2_PopUp) {
+/*			else if(aiid == IID_4_2_PopUp) {
 				log_info("IID_4_2_PopUp");
 				send_complicate_request(&msg, MSG_DEVICE_ACTION, SERVER_DEVICE, id, aiid, siid,
 						DEVICE_ACTION_SD_POPUP, 0, 0);
 			}
+*/
 			break;
-		case IID_6_MoreSet:
+/*		case IID_6_MoreSet:
 			if(aiid == IID_6_1_Reboot) {
 				log_info("IID_6_1_Reboot");
 				send_complicate_request(&msg, MSG_KERNEL_ACTION, SERVER_KERNEL, id, aiid, siid,
 						KERNEL_ACTION_REBOOT, 0, 0);
 			}
 			break;
+*/
 		default:
 			break;
       }
@@ -1053,6 +1020,14 @@ next_level:
        }
        else{
     	   miio_info.time_sync = 1;
+			/********message body********/
+			message_t msg;
+			msg_init(&msg);
+			msg.message = MSG_MIIO_TIME_SYNCHRONIZED;
+			msg.sender = msg.receiver = SERVER_MIIO;
+			ret = server_video_message(&msg);
+			ret = server_recorder_message(&msg);
+			/********message body********/
        }
        return 0;
     }
@@ -1223,7 +1198,7 @@ static int miio_rsv_init(void *param)
     	printf("create miio message rsv handler, ret=%d\n", ret);
     	return -1;
     }
-    server_set_thread_start(THREAD_RSV);
+    misc_set_bit(&info.thread_start, THREAD_RSV, 1);
     return 0;
 }
 
@@ -1252,7 +1227,7 @@ static int miio_poll_init(void *param)
     	log_err("create mi message handler, ret=%d\n", ret);
     	return -1;
     }
-    server_set_thread_start(THREAD_POLL);
+    misc_set_bit(&info.thread_start, THREAD_POLL, 1);
     return 0;
 }
 
@@ -1319,7 +1294,7 @@ static void *miio_poll_func(void *arg)
 		close(msg_helper.otd_sock);
 	}
 	log_info("-----------thread exit: server_miio_poll-----------");
-	server_set_thread_exit(THREAD_POLL);
+	misc_set_bit(&info.thread_start, THREAD_POLL, 0);
 	pthread_exit(0);
 }
 
@@ -1351,7 +1326,7 @@ static void *miio_rsv_func(void *arg)
 		}
     }
 	log_info("-----------thread exit: server_miio_rsv-----------");
-	server_set_thread_exit(THREAD_RSV);
+	misc_set_bit(&info.thread_start, THREAD_RSV, 0);
 	pthread_exit(0);
 }
 
@@ -1514,13 +1489,6 @@ static int server_message_proc(void)
 	case MSG_MANAGER_EXIT:
 		server_set_status(STATUS_TYPE_EXIT,1);
 		break;
-	case MSG_CONFIG_READ_ACK:
-		if( msg.result==0 ) {
-			memcpy( (miio_config_t*)(&config), (miio_config_t*)msg.arg, msg.arg_size);
-			if( server_get_status(STATUS_TYPE_CONFIG) == ( (1<<CONFIG_MIIO_MODULE_NUM) -1 ) )
-				server_set_status(STATUS_TYPE_STATUS, STATUS_SETUP);
-		}
-		break;
 	case MSG_MANAGER_TIMER_ACK:
 		((HANDLER)msg.arg_in.handler)();
 		break;
@@ -1528,6 +1496,8 @@ static int server_message_proc(void)
 		miio_socket_send(msg.arg, msg.arg_size);
 		break;
 	case MSG_MIIO_RPC_SEND:
+		log_info("----in miio params---%s---------", msg.extra);
+		log_info("----in miio method---%s---------", msg.arg);
 		rpc_send_msg(msg.arg_in.cat, msg.extra, msg.arg);
 		break;
 	case MSG_MIIO_RPC_REPORT_SEND:
@@ -1535,23 +1505,32 @@ static int server_message_proc(void)
 		break;
 	case MSG_VIDEO_GET_PARA_ACK:
 	case MSG_DEVICE_GET_PARA_ACK:
-		miio_get_properties_callback(msg.arg_pass,msg.result, msg.arg_size, msg.arg);
+	case MSG_RECORDER_GET_PARA_ACK:
+//		miio_get_properties_callback(msg.arg_pass,msg.result, msg.arg_size, msg.arg);
+		if( msg.arg_pass.handler != NULL)
+			( *( int(*)(message_arg_t,int,int,void*) ) msg.arg_pass.handler ) (msg.arg_pass, msg.result, msg.arg_size, msg.arg);
 		break;
 	case MSG_VIDEO_CTRL_ACK:
 	case MSG_VIDEO_CTRL_EXT_ACK:
 	case MSG_VIDEO_CTRL_DIRECT_ACK:
 	case MSG_VIDEO_START_ACK:
 	case MSG_VIDEO_STOP_ACK:
-		miio_set_properties_callback(msg.arg_pass,msg.result, msg.arg_size, msg.arg);
+	case MSG_RECORDER_CTRL_DIRECT_ACK:
+//		miio_set_properties_callback(msg.arg_pass,msg.result, msg.arg_size, msg.arg);
+		if( msg.arg_pass.handler != NULL)
+			( *( int(*)(message_arg_t,int,int,void*) ) msg.arg_pass.handler ) (msg.arg_pass, msg.result, msg.arg_size, msg.arg);
 		break;
 	case MSG_DEVICE_ACTION_ACK:
 		miio_action_func_ack(msg.arg_pass, msg.result, msg.arg_size, msg.arg);
 		break;
-	case MSG_KERNEL_OTA_REPORT:
-		ota_proc(msg.arg_in.cat, msg.arg_in.dog, msg.arg_in.duck);
-		break;
-	case MSG_KERNEL_OTA_REQUEST_ACK:
-		ota_get_state_ack(msg.arg_in.duck, msg.arg_pass.cat, msg.arg_in.cat, msg.arg_in.dog);
+//	case MSG_KERNEL_OTA_REPORT:
+//		ota_proc(msg.arg_in.cat, msg.arg_in.dog, msg.arg_in.duck);
+//		break;
+//	case MSG_KERNEL_OTA_REQUEST_ACK:
+//		ota_get_state_ack(msg.arg_in.duck, msg.arg_pass.cat, msg.arg_in.cat, msg.arg_in.dog);
+//		break;
+	default:
+		log_err("not processed message = %d", msg.message);
 		break;
 	}
 	msg_free(&msg);
@@ -1579,153 +1558,118 @@ static int heart_beat_proc(void)
 }
 
 /*
- * State Machine
+ * task error: error->5 seconds->shut down server->msg manager
  */
-static int server_none(void)
+static void task_error(void)
 {
-	int ret = 0;
-	message_t msg;
-    /********message body********/
-	msg_init(&msg);
-	msg.message = MSG_CONFIG_READ;
-	msg.sender = msg.receiver = SERVER_MIIO;
-	/****************************/
-	ret = server_config_message(&msg);
-	if( ret == 0 )
-		server_set_status(STATUS_TYPE_STATUS, STATUS_WAIT);
-	else
-		sleep(1);
-	return ret;
-}
-
-static int server_wait(void)
-{
-	int ret = 0;
-	return ret;
-}
-
-static int server_setup(void)
-{
-	int ret = 0;
-	ret = miio_rsv_init(NULL);
-	if ( ret!=0 ) {
-		server_set_status(STATUS_TYPE_STATUS, STATUS_ERROR);
-		return ret;
+	unsigned int tick=0;
+	switch( info.status ) {
+		case STATUS_ERROR:
+			log_err("!!!!!!!!error in miio, restart in 5 s!");
+			info.tick = time_get_now_stamp();
+			info.status = STATUS_NONE;
+			break;
+		case STATUS_NONE:
+			tick = time_get_now_stamp();
+			if( (tick - info.tick) > 5 ) {
+				info.exit = 1;
+				info.tick = tick;
+			}
+			break;
 	}
-	ret = miio_poll_init(NULL);
-	if ( ret!=0 ) {
-		server_set_status(STATUS_TYPE_STATUS, STATUS_ERROR);
-		return ret;
-	}
-	server_set_status(STATUS_TYPE_STATUS, STATUS_IDLE);
-	return ret;
+	usleep(1000);
+	return;
 }
 
-static int server_idle(void)
+static void task_default(void)
 {
-	int ret = 0;
-	server_set_status(STATUS_TYPE_STATUS, STATUS_START);
-	return ret;
-}
-
-static int server_start(void)
-{
-	int ret = 0;
 	message_t msg;
-    /********message body********/
-	msg_init(&msg);
-	msg.message = MSG_MANAGER_TIMER_ADD;
-	msg.sender = SERVER_MIIO;
-	msg.arg_in.cat = 1000;
-	msg.arg_in.dog = 0;
-	msg.arg_in.duck = 0;
-	msg.arg_in.handler = &miio_routine_1000ms;
-	/****************************/
-	manager_message(&msg);
-	server_set_status(STATUS_TYPE_STATUS, STATUS_RUN);
-	return ret;
-}
-
-static int server_run(void)
-{
 	int ret = 0;
-	return ret;
+	switch( info.status){
+		case STATUS_NONE:
+			ret = config_miio_read(&config);
+			if( ret == 0 )
+				server_set_status(STATUS_TYPE_STATUS, STATUS_WAIT);
+			else
+				sleep(1);
+			break;
+		case STATUS_WAIT:
+			server_set_status(STATUS_TYPE_STATUS, STATUS_SETUP);
+			break;
+		case STATUS_SETUP:
+			ret = miio_rsv_init(NULL);
+			if ( ret!=0 ) {
+				server_set_status(STATUS_TYPE_STATUS, STATUS_ERROR);
+				break;
+			}
+			ret = miio_poll_init(NULL);
+			if ( ret!=0 ) {
+				server_set_status(STATUS_TYPE_STATUS, STATUS_ERROR);
+				break;
+			}
+			server_set_status(STATUS_TYPE_STATUS, STATUS_IDLE);
+			break;
+		case STATUS_IDLE:
+			info.status = STATUS_START;
+			break;
+		case STATUS_START:
+		    /********message body********/
+			msg_init(&msg);
+			msg.message = MSG_MANAGER_TIMER_ADD;
+			msg.sender = SERVER_MIIO;
+			msg.arg_in.cat = 1000;
+			msg.arg_in.dog = 0;
+			msg.arg_in.duck = 0;
+			msg.arg_in.handler = &miio_routine_1000ms;
+			manager_message(&msg);
+			/****************************/
+			server_set_status(STATUS_TYPE_STATUS, STATUS_RUN);
+			break;
+		case STATUS_RUN:
+			break;
+		case STATUS_STOP:
+			break;
+		case STATUS_RESTART:
+			break;
+		case STATUS_ERROR:
+			info.task.func = task_error;
+			break;
+	}
+	usleep(1000);
+	return;
 }
 
-static int server_stop(void)
-{
-	int ret = 0;
-	return ret;
-}
-
-static int server_restart(void)
-{
-	int ret = 0;
-	return ret;
-}
-
-static int server_error(void)
-{
-	int ret = 0;
-	server_release();
-	log_err("!!!!!!!!error in miio!!!!!!!!");
-	return ret;
-}
-
+/*
+ * server entry point
+ */
 static void *server_func(void)
 {
     signal(SIGINT, server_thread_termination);
     signal(SIGTERM, server_thread_termination);
 	misc_set_thread_name("server_miio");
 	pthread_detach(pthread_self());
-	while( !server_get_status(STATUS_TYPE_EXIT) ) {
-	switch( server_get_status(STATUS_TYPE_STATUS) ){
-		case STATUS_NONE:
-			server_none();
-			break;
-		case STATUS_WAIT:
-			server_wait();
-			break;
-		case STATUS_SETUP:
-			server_setup();
-			break;
-		case STATUS_IDLE:
-			server_idle();
-			break;
-		case STATUS_START:
-			server_start();
-			break;
-		case STATUS_RUN:
-			server_run();
-			break;
-		case STATUS_STOP:
-			server_stop();
-			break;
-		case STATUS_RESTART:
-			server_restart();
-			break;
-		case STATUS_ERROR:
-			server_error();
-			break;
-		}
+	//default task
+	info.task.func = task_default;
+	info.task.start = STATUS_NONE;
+	info.task.end = STATUS_RUN;
+	while( !info.exit ) {
+		info.task.func();
 		server_message_proc();
 		heart_beat_proc();
 	}
-	server_release();
-	if( server_get_status(STATUS_TYPE_EXIT) ) {
-		while( thread_exit != thread_start ) {
+	if( info.exit ) {
+		while( info.thread_start ) {
 		}
-		message_t msg;
 	    /********message body********/
+		message_t msg;
 		msg_init(&msg);
 		msg.message = MSG_MANAGER_EXIT_ACK;
 		msg.sender = SERVER_MIIO;
-		/***************************/
 		manager_message(&msg);
-		thread_start = 0;
-		thread_exit = 0;
+		/***************************/
 	}
-	log_info("-----------thread exit: server_video-----------");
+	server_release();
+	log_info("-----------thread exit: server_miio-----------");
 	pthread_exit(0);
 }
 
