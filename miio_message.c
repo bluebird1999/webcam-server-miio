@@ -90,12 +90,10 @@ static int miio_destory_msg_queue(int msg_id)
 int miio_send_msg_queue(int msg_id,struct miio_message_queue_t *msg_queue)
 {
     struct miio_message_queue_t buf;
-
+    memset(buf.msg_buf, 0, sizeof(buf.msg_buf));
     buf.mtype = msg_queue->mtype;
     buf.len = msg_queue->len;
-//    buf.msg_buf = msg_queue->msg_buf;
     memcpy(buf.msg_buf, msg_queue->msg_buf, buf.len);
-
     int ret = msgsnd(msg_id, (void*)&buf, (4 + buf.len), 0);
     if( ret < 0) {
 //      perror("msgsnd");
@@ -107,16 +105,13 @@ int miio_send_msg_queue(int msg_id,struct miio_message_queue_t *msg_queue)
 int miio_rec_msg_queue(int msg_id, int recvType, struct miio_message_queue_t *msg_queue)
 {
     struct miio_message_queue_t buf;
-
     int size = MIIO_MAX_PAYLOAD + 4;
     int ret = msgrcv(msg_id, (void*)&buf, size, recvType, IPC_NOWAIT);
     if( ret < 0) {
 //      perror("msgrcv");
         return -1;
     }
-
     msg_queue->len = buf.len;
-//   msg_queue->msg_buf = buf.msg_buf;
     memcpy(msg_queue->msg_buf, buf.msg_buf, msg_queue->len);
     return 0;
 }

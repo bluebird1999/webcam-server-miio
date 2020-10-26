@@ -99,7 +99,7 @@ static int ntp_parse_jason(char* msg, char* key, char*value, int max_len)
 int ntp_get_local_time(void)
 {
 	int ret = 0;
-  	ntp_id = generate_random_id();
+  	ntp_id = misc_generate_random_id();
 	char ackbuf[1024] = {0x00};
 
 	struct json_object *send_object = json_object_new_object();

@@ -26,38 +26,14 @@
 static pthread_rwlock_t			lock;
 static miio_config_t			miio_config;
 static int						dirty;
-/*
+
 static config_map_t miio_config_iot_map[] = {
-    {"camera_on",      					&(miio_config.iot.camera_on),      				cfg_u32, 1,0, 0,1,  	},
-    {"camera_image_rollover",  			&(miio_config.iot.camera_image_rollover),  		cfg_u32, 0,0, 0,360,    },
-    {"camera_night_shot", 				&(miio_config.iot.camera_night_shot), 			cfg_u32, 0,0, 0,10,    },
-    {"camera_time_watermark",  			&(miio_config.iot.camera_time_watermark),  		cfg_u32, 1,0, 0,1,    },
-    {"camera_wdr_mode",        			&(miio_config.iot.camera_wdr_mode),        		cfg_u32, 0,0, 0,1,	},
-    {"camera_glimmer_full_color",     	&(miio_config.iot.camera_glimmer_full_color),   cfg_u32, 0,0, 0,1,  	},
-    {"camera_recording_mode",       	&(miio_config.iot.camera_recording_mode),       cfg_u32, 0,0, 0,10,	},
-    {"camera_motion_tracking",       	&(miio_config.iot.camera_motion_tracking),      cfg_u32, 0,0, 0,1,	},
-    {"indicator_on",        			&(miio_config.iot.indicator_on),         		cfg_u32, 1,0, 0,1,	},
-    {"indicator_mode",        			&(miio_config.iot.indicator_mode),        		cfg_u32, 0,0, 0,10,	},
-    {"indicator_brightness",        	&(miio_config.iot.indicator_brightness),  		cfg_u32, 80,0, 1,100,    },
-    {"indicator_color",        			&(miio_config.iot.indicator_color),   			cfg_u32, 255,0, 0,16777215,    },
-    {"indicator_color_temperature",     &(miio_config.iot.indicator_color_temperature),	cfg_u32, 2000,0, 1000,10000,    },
-	{"indicator_flow",     				&(miio_config.iot.indicator_flow),				cfg_u32, 0,0, 0,10,    },
-    {"indicator_saturability",        	&(miio_config.iot.indicator_saturability),		cfg_u32, 80,0, 0,100,   },
-    {"sdcard_status",        			&(miio_config.iot.sdcard_status),        		cfg_u32, 1,0, 0,10,	},
-    {"sdcard_total_space",        		&(miio_config.iot.sdcard_total_space),       	cfg_u32, 10,0, 0,10,	},
-    {"sdcard_free_space",        		&(miio_config.iot.sdcard_free_space),        	cfg_u32, 2,0, 0,10,	},
-    {"sdcard_used_space",        		&(miio_config.iot.sdcard_used_space),        	cfg_u32, 8,0, 0,10,	},
-    {"motion_on",        				&(miio_config.iot.motion_on),        			cfg_u32, 0,0, 0,1,	},
-    {"motion_alarm_interval",        	&(miio_config.iot.motion_alarm_interval),    	cfg_u32, 1,0, 1,30,	},
-    {"motion_sensitivity",        		&(miio_config.iot.motion_sensitivity),       	cfg_u32, 1,0, 0,10,	},
-    {"motion_start_time",        		&(miio_config.iot.motion_start_time),        	cfg_string,"2020",0, 0,32,	},
-    {"motion_end_time",        			&(miio_config.iot.motion_end_time),        		cfg_string,"2020",0, 0,32,	},
+    {"board_type",      					&(miio_config.iot.board_type),      				cfg_u32, 1,0, 0,10,  	},
     {NULL,},
 };
-*/
 
 //function
-static int miio_config_device_read(void);
+static int miio_config_device_read(int);
 static int miio_config_device_write(void);
 static int miio_config_save(void);
 /*
@@ -102,7 +78,7 @@ static int miio_config_save(void)
 	return ret;
 }
 
-static int miio_config_device_read(void)
+static int miio_config_device_read(int board)
 {
 	FILE *fp = NULL;
 	int pos = 0;
@@ -144,31 +120,35 @@ static int miio_config_device_read(void)
     	char *ptr_mac = 0;
     	char *ptr_model = 0;
     	char *ptr_vendor = 0;
-    	ptr_did = strstr(data, "did=");
-    	ptr_key = strstr(data, "key=");
-    	ptr_mac = strstr(data, "mac=");
+    	char *p,*m;
+    	if( !board ) {
+			ptr_did = strstr(data, "did=");
+			ptr_key = strstr(data, "key=");
+			ptr_mac = strstr(data, "mac=");
+    	}
     	ptr_model = strstr(data, "model=");
     	ptr_vendor = strstr(data, "vendor=");
-    	char *p,*m;
-    	if(ptr_did&&ptr_key&&ptr_mac) {
+    	if( !board && ptr_did && ptr_key && ptr_mac ) {
     		len = 9;//did length
     		memcpy(miio_config.device.did,ptr_did+4,len);
     		len = 16;//key length
     		memcpy(miio_config.device.key,ptr_key+4,len);
     		len = 17;//mac length
     		memcpy(miio_config.device.mac,ptr_mac+4,len);
-    		p = ptr_model+6; m = miio_config.device.model;
-    		while(*p!='\n' && *p!='\0') {
-    			memcpy(m, p, 1);
-    			m++;p++;
-    		}
-    		*m = '\0';
-    		p = ptr_vendor+7; m = miio_config.device.vendor;
-    		while(*p!='\n' && *p!='\0') {
-    			memcpy(m, p, 1);
-    			m++;p++;
-    		}
-    		*m = '\0';
+    	}
+    	if( ptr_model && ptr_vendor) {
+			p = ptr_model+6; m = miio_config.device.model;
+			while(*p!='\n' && *p!='\0') {
+				memcpy(m, p, 1);
+				m++;p++;
+			}
+			*m = '\0';
+			p = ptr_vendor+7; m = miio_config.device.vendor;
+			while(*p!='\n' && *p!='\0') {
+				memcpy(m, p, 1);
+				m++;p++;
+			}
+			*m = '\0';
     	}
     	free(data);
     }
@@ -276,14 +256,13 @@ int config_miio_read(miio_config_t *mconfig)
 		log_err("add lock fail, ret = %d\n", ret);
 		return ret;
 	}
-/*	ret = read_config_file(&miio_config_iot_map, CONFIG_MIIO_IOT_PATH);
+	ret = read_config_file(&miio_config_iot_map, CONFIG_MIIO_IOT_PATH);
 	if(!ret)
 		misc_set_bit(&miio_config.status, CONFIG_MIIO_IOT,1);
 	else
 		misc_set_bit(&miio_config.status, CONFIG_MIIO_IOT,0);
 	ret1 |= ret;
-*/
-	ret = miio_config_device_read();
+	ret = miio_config_device_read( miio_config.iot.board_type );
 	if(!ret)
 		misc_set_bit(&miio_config.status, CONFIG_MIIO_DEVICE,1);
 	else
@@ -319,11 +298,10 @@ int config_miio_set(int module, void *arg)
 		manager_message(&msg);
 	}
 	misc_set_bit(&dirty, module, 1);
-/*	if( module == CONFIG_MIIO_IOT) {
+	if( module == CONFIG_MIIO_IOT) {
 		memcpy( (miio_config_iot_t*)(&miio_config.iot), arg, sizeof(miio_config_iot_t));
 	}
 	else
-*/
 	if ( module == CONFIG_MIIO_DEVICE ) {
 		//nothing yet
 	}

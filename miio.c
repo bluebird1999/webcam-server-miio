@@ -60,6 +60,7 @@ static miio_config_t		config;
 static miio_info_t			miio_info;
 static int					message_id;
 static struct msg_helper_t 	msg_helper;
+static int					did_rpc_id;
 
 //function
 //common
@@ -97,6 +98,8 @@ static int miio_action(const char *msg);
 static int miio_action_func(int id,char *did,int siid,int aiid,cJSON *json_in);
 static int miio_action_func_ack(message_arg_t arg_pass, int result, int size, void *arg);
 static int miot_properties_changed(int piid,int siid,int value, char* string);
+static int miio_query_device_did(void);
+static int miio_parse_did(char*);
 
 /*
  * %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -144,14 +147,19 @@ static int miio_routine_1000ms(void)
 		miio_request_local_status();
 	if( !miio_info.time_sync )
 		ntp_get_local_time();
+	if( config.iot.board_type && !miio_info.did_acquired )
+		miio_query_device_did();
 	if( miio_info.miio_status == STATE_CLOUD_CONNECTED
 		&& miio_info.time_sync ) {
+		if( config.iot.board_type && !miio_info.did_acquired)
+			return ret;
 		/********message body********/
 		msg_init(&msg);
 		msg.message = MSG_MANAGER_TIMER_REMOVE;
 		msg.arg_in.handler = miio_routine_1000ms;
-		/****************************/
+		msg.receiver = msg.sender = SERVER_MIIO;
 		manager_message(&msg);
+		/****************************/
 	}
 	return ret;
 }
@@ -212,6 +220,20 @@ end:
 		log_err("add session unlock fail, ret = %d\n", ret);
 	}
 	return sent;
+}
+
+static int miio_query_device_did(void)
+{
+	int ret = 0;
+  	did_rpc_id = misc_generate_random_id();
+	char ackbuf[1024] = {0x00};
+	struct json_object *send_object = json_object_new_object();
+	json_object_object_add(send_object, "id", json_object_new_int(did_rpc_id));
+	json_object_object_add(send_object, "method", json_object_new_string("local.query_did"));
+	sprintf(ackbuf, "%s", json_object_to_json_string_ext(send_object, 1));
+	json_object_put(send_object);
+	ret = miio_socket_send(ackbuf, strlen(ackbuf));
+	return ret;
 }
 
 static void miio_request_local_status(void)
@@ -284,9 +306,9 @@ static int miio_get_properties_callback(message_arg_t arg_pass, int result, int 
 		case IID_4_MemoryCardManagement:
 			if( !result ) {
 				if( arg_pass.dog == IID_4_1_Status) item = cJSON_CreateNumber( ((device_iot_config_t*)arg)->sd_iot_info.plug );
-				else if( arg_pass.dog == IID_4_2_StorageTotalSpace) item = cJSON_CreateNumber( ((device_iot_config_t*)arg)->sd_iot_info.totalBytes * 1024 );
-				else if( arg_pass.dog == IID_4_3_StorageFreeSpace) item = cJSON_CreateNumber( ((device_iot_config_t*)arg)->sd_iot_info.freeBytes * 1024 );
-				else if( arg_pass.dog == IID_4_4_StorageUsedSpace) item = cJSON_CreateNumber( ((device_iot_config_t*)arg)->sd_iot_info.usedBytes * 1024 );
+				else if( arg_pass.dog == IID_4_2_StorageTotalSpace) item = cJSON_CreateNumber( ((device_iot_config_t*)arg)->sd_iot_info.totalBytes / 1024 );
+				else if( arg_pass.dog == IID_4_3_StorageFreeSpace) item = cJSON_CreateNumber( ((device_iot_config_t*)arg)->sd_iot_info.freeBytes / 1024 );
+				else if( arg_pass.dog == IID_4_4_StorageUsedSpace) item = cJSON_CreateNumber( ((device_iot_config_t*)arg)->sd_iot_info.usedBytes / 1024 );
 				cJSON_AddItemToObject(item_result_param1,"value",item);
 				item = cJSON_CreateNumber(0);
 				cJSON_AddItemToObject(item_result_param1,"code",item);
@@ -404,7 +426,10 @@ static int miio_get_properties_vlaue(int id,char *did,int piid,int siid,cJSON *j
 			else if(piid == IID_1_3_SerialNumber) {
 				char serial[MAX_SYSTEM_STRING_SIZE];
 				memset(serial,0,MAX_SYSTEM_STRING_SIZE);
-				sprintf(serial, "%s", config.device.key);
+				if( config.iot.board_type == 0)
+					sprintf(serial, "%s", config.device.key);
+				else if( config.iot.board_type == 1)
+					sprintf(serial, "%s", config.device.did);
 				item = cJSON_CreateString(serial);
 				cJSON_AddItemToObject(json,"value",item);
 			}
@@ -628,9 +653,13 @@ static int miio_set_properties_vlaue(int id, char *did, int piid, int siid, cJSO
 	case IID_3_IndicatorLight:
 		if(piid == IID_3_1_On) {
 			log_info("IID_3_1_On:%d ",value_json->valueint);
-/*			send_complicate_request(&msg, MSG_DEVICE_CTRL_DIRECT, SERVER_DEVICE, id, piid, siid,
-					DEVICE_CTRL_INDICATOR_SWITCH, &(value_json->valueint), sizeof(int),miio_set_properties_callback);
-*/
+			device_iot_config_t tmp;
+			memset(&tmp, 0, sizeof(device_iot_config_t));
+			tmp.led1_onoff = value_json->valueint;
+			tmp.led2_onoff = value_json->valueint;
+			send_complicate_request(&msg, MSG_DEVICE_CTRL_DIRECT, SERVER_DEVICE, id, piid, siid,
+					DEVICE_CTRL_LED, &tmp, sizeof(int),miio_set_properties_callback);
+
 			return -1;
 		}
 		break;
@@ -809,21 +838,33 @@ static int miio_action_func_ack(message_arg_t arg_pass, int result, int size, vo
 				}
 
 			}
-/*			else if(arg_pass.dog == IID_4_2_PopUp) {
+			else if(arg_pass.dog == IID_4_2_PopUp) {
 				if( !result ) {
 					sprintf(ackbuf, OT_REG_OK_TEMPLATE, arg_pass.cat);
-					miot_properties_changed(IID_4_1_Status,IID_4_MemoryCardManagement,SD_CARD_POPUP,0);
+//					miot_properties_changed(IID_4_1_Status,IID_4_MemoryCardManagement,SD_CARD_POPUP,0);
 				}
 				else {
 					sprintf(ackbuf, OT_REG_ERR_TEMPLATE, arg_pass.cat);
 
 				}
 			}
-*/
+
 			miio_socket_send(ackbuf, strlen(ackbuf));
 			break;
 		case IID_6_MoreSet:
 			if(arg_pass.dog == IID_6_1_Reboot) {
+				if(!result) {
+					sprintf(ackbuf, OT_REG_OK_TEMPLATE, arg_pass.cat);
+				}
+				else {
+					sprintf(ackbuf, OT_REG_ERR_TEMPLATE, arg_pass.cat);
+				}
+			}
+			miio_socket_send(ackbuf, strlen(ackbuf));
+			break;
+		case IID_3_IndicatorLight:
+			if(arg_pass.dog == IID_3_1_On) {
+				log_err("aaaaaaaa -----sss  IID_3_1_On");
 				if(!result) {
 					sprintf(ackbuf, OT_REG_OK_TEMPLATE, arg_pass.cat);
 				}
@@ -848,16 +889,16 @@ static int miio_action_func(int id,char *did,int siid,int aiid,cJSON *json_in)
 		case IID_4_MemoryCardManagement:
 			if(aiid == IID_4_1_Format) {
 				log_info("IID_4_1_Format");
-				send_complicate_request(&msg, DEVICE_ACTION_SD_FORMAT, SERVER_DEVICE, id, aiid, siid,
+				send_complicate_request(&msg, MSG_DEVICE_ACTION, SERVER_DEVICE, id, aiid, siid,
 						DEVICE_ACTION_SD_FORMAT, 0, 0, miio_action_func_ack);
 //				miot_properties_changed(IID_4_1_Status,IID_4_MemoryCardManagement,SD_CARD_FORMATING,0);
 			}
-/*			else if(aiid == IID_4_2_PopUp) {
+			else if(aiid == IID_4_2_PopUp) {
 				log_info("IID_4_2_PopUp");
-				send_complicate_request(&msg, MSG_DEVICE_ACTION, SERVER_DEVICE, id, aiid, siid,
-						DEVICE_ACTION_SD_POPUP, 0, 0);
+				send_complicate_request(&msg, MSG_DEVICE_CTRL_DIRECT, SERVER_DEVICE, id, aiid, siid,
+						DEVICE_ACTION_SD_UMOUNT, 0, 0, miio_action_func_ack);
 			}
-*/
+
 			break;
 /*		case IID_6_MoreSet:
 			if(aiid == IID_6_1_Reboot) {
@@ -960,11 +1001,51 @@ static int miio_event(const char *msg)
 	return 0;
 }
 
+int miio_parse_did(char *msg)
+{
+    int ret = 0;
+    char local_did[32] = {0};
+	char *pA = NULL, *pB = NULL, *pC = NULL;
+	char buf[64] = {0};
+	int len = 0;
+	char key = "params";
+	if (strlen(key) > 59) {
+		log_err( "key(%s) len is too long(%d), max len(59)!\n", key, strlen(key));
+		return -1;
+	}
+	sprintf(buf, "\"%s\":", key);
+	pA = strstr(msg, buf);
+	if (pA != NULL) {
+		pA += strlen(buf);
+		pB = strstr(pA, "}");
+		pC = strstr(pA, "}");
+		if (pC < pB)
+			pB = pC;
+		if (pB != NULL) {
+			len = pB - pA;
+			if (len > 32) {
+				log_err( "value len is too long(%d), max len(32)!\n", len);
+				return -1;
+			}
+			strncpy(local_did, pA, len);
+		} else {
+			log_err( "response url parse '%s' error!\n", key);
+			return -1;
+		}
+	} else {
+		log_err( "response url don't have '%s'!\n", key);
+		return -1;
+	}
+    strcpy(config.device.did, local_did);
+    return ret ;
+}
+
+
 static int miio_message_dispatcher(const char *msg, int len)
 {
 	int ret = -1, id = 0;
 	bool sendack = false;
-	void *msg_id = NULL;
+	message_t message;
     char ackbuf[MIIO_MAX_PAYLOAD];
     if( miio_info.miio_status == STATE_CLOUD_CONNECTED)
     	goto next_level;
@@ -987,12 +1068,12 @@ static int miio_message_dispatcher(const char *msg, int len)
 		else if(json_verify_method_value(msg, "params", "cloud_connected", json_type_string) == 0) {
 			//send message to miss server
 			miio_info.miio_status = STATE_CLOUD_CONNECTED;
-			message_t msg;
 			/********message body********/
+			message_t msg;
 			msg_init(&msg);
 			msg.message = MSG_MIIO_CLOUD_CONNECTED;
-			/****************************/
 			server_miss_message(&msg);
+			/****************************/
 		}
 		else {
 			return 0;
@@ -1003,6 +1084,8 @@ next_level:
     if (ret < 0) {
     	return ret;
     }
+/*
+
 	msg_id = miss_get_context_from_id(id);
 	if (NULL != msg_id) {
 		log_debug("miss_rpc_process id:%d\n",id);
@@ -1013,20 +1096,48 @@ next_level:
 			ret = 0;
 		}
 	}
+*/
+	/********message body********/
+	msg_init(&message);
+	message.message = MSG_MISS_RPC_SEND;
+	message.sender = message.receiver = SERVER_MIIO;
+	message.arg_in.cat = id;
+	message.arg = msg;
+	message.arg_size = len + 1;
+	ret = server_miss_message(&message);
+	/********message body********/
     if ( id == ntp_get_rpc_id() ) {
        ret = ntp_time_parse(msg);
        if(ret < 0 ){
             log_err("http_jason_get_timeInt error\n");
        }
        else{
-    	   miio_info.time_sync = 1;
+			miio_info.time_sync = 1;
 			/********message body********/
-			message_t msg;
-			msg_init(&msg);
-			msg.message = MSG_MIIO_TIME_SYNCHRONIZED;
-			msg.sender = msg.receiver = SERVER_MIIO;
-			ret = server_video_message(&msg);
-			ret = server_recorder_message(&msg);
+			msg_init(&message);
+			message.message = MSG_MIIO_TIME_SYNCHRONIZED;
+			message.sender = message.receiver = SERVER_MIIO;
+			for( char sent=0;(sent < MAX_ASYN_SEND_TRY) && server_video_message(&message);sent++ ) {};
+			for( char sent=0;(sent < MAX_ASYN_SEND_TRY) && server_recorder_message(&message);sent++ ) {};
+			for( char sent=0;(sent < MAX_ASYN_SEND_TRY) && server_player_message(&message);sent++ ) {};
+			/********message body********/
+       }
+       return 0;
+    }
+    if ( config.iot.board_type && (id == did_rpc_id) ) {
+       ret = miio_parse_did(msg);
+       if(ret < 0 ){
+            log_err("http_jason_get_device_did error\n");
+       }
+       else{
+    	   miio_info.did_acquired = 1;
+    	   	/********message body********/
+			msg_init(&message);
+			message.message = MSG_MIIO_DID_ACUIRED;
+			message.arg = config.device.did;
+			message.arg_size = strlen(config.device.did) + 1;
+			message.sender = message.receiver = SERVER_MIIO;
+			for( char sent=0;(sent < MAX_ASYN_SEND_TRY) && server_miss_message(&message);sent++ ) {};
 			/********message body********/
        }
        return 0;
@@ -1063,7 +1174,16 @@ next_level:
 	}
 	else if (json_verify_method_value(msg, "method", "miss.set_vendor", json_type_string) == 0) {
 		log_info("miss.set_vendor: %s\n", msg);
-		ret = miss_rpc_process(NULL, msg, len);
+//		ret = miss_rpc_process(NULL, msg, len);
+		/********message body********/
+		msg_init(&message);
+		message.message = MSG_MISS_RPC_SEND;
+		message.sender = message.receiver = SERVER_MIIO;
+		message.arg_in.cat = -1;
+		message.arg = msg;
+		message.arg_size = len + 1;
+		ret = server_miss_message(&message);
+		/********message body********/
 	}
 	else if (json_verify_method_value(msg, "method", "miIO.reboot", json_type_string) == 0) {
 //		ret = iot_miio_reboot(id);
@@ -1135,7 +1255,7 @@ static int miio_recv_handler_block(int sockfd, char *msg, int msg_len)
 			return ret;
 		}
 		tmplen = tok->char_offset;
-		tmpstr = malloc(tmplen + 1);
+		tmpstr = malloc(tmplen);
 		if (tmpstr == NULL) {
 			log_warning("%s(), malloc error\n", __func__);
 			json_tokener_free(tok);
@@ -1143,10 +1263,11 @@ static int miio_recv_handler_block(int sockfd, char *msg, int msg_len)
 			return -1;
 		}
 		memcpy(tmpstr, msg, tmplen);
-		tmpstr[tmplen] = '\0';
+//		tmpstr[tmplen] = '\0';
         msg_queue.mtype = MIIO_MESSAGE_TYPE;
-        msg_queue.len = tmplen+1;
-        memcpy(msg_queue.msg_buf, tmpstr, tmplen+1);
+        msg_queue.len = tmplen;
+        memset(msg_queue.msg_buf, 0, sizeof(msg_queue.msg_buf));
+        memcpy(msg_queue.msg_buf, tmpstr, tmplen);
         free(tmpstr);
 		log_warning("%s, len:%d\n",msg_queue.msg_buf,msg_queue.len);
         miio_send_msg_queue(message_id,&msg_queue);
@@ -1317,6 +1438,7 @@ static void *miio_rsv_func(void *arg)
 			else
 				break;
 		}
+		memset(msg_buf.msg_buf, 0, sizeof(msg_buf.msg_buf));
 		ret = miio_rec_msg_queue(message_id,MIIO_MESSAGE_TYPE,&msg_buf);
 		if(ret == 0) {
 			miio_message_dispatcher((const char *) msg_buf.msg_buf,msg_buf.len);
@@ -1496,8 +1618,6 @@ static int server_message_proc(void)
 		miio_socket_send(msg.arg, msg.arg_size);
 		break;
 	case MSG_MIIO_RPC_SEND:
-		log_info("----in miio params---%s---------", msg.extra);
-		log_info("----in miio method---%s---------", msg.arg);
 		rpc_send_msg(msg.arg_in.cat, msg.extra, msg.arg);
 		break;
 	case MSG_MIIO_RPC_REPORT_SEND:
@@ -1506,7 +1626,6 @@ static int server_message_proc(void)
 	case MSG_VIDEO_GET_PARA_ACK:
 	case MSG_DEVICE_GET_PARA_ACK:
 	case MSG_RECORDER_GET_PARA_ACK:
-//		miio_get_properties_callback(msg.arg_pass,msg.result, msg.arg_size, msg.arg);
 		if( msg.arg_pass.handler != NULL)
 			( *( int(*)(message_arg_t,int,int,void*) ) msg.arg_pass.handler ) (msg.arg_pass, msg.result, msg.arg_size, msg.arg);
 		break;
@@ -1516,7 +1635,6 @@ static int server_message_proc(void)
 	case MSG_VIDEO_START_ACK:
 	case MSG_VIDEO_STOP_ACK:
 	case MSG_RECORDER_CTRL_DIRECT_ACK:
-//		miio_set_properties_callback(msg.arg_pass,msg.result, msg.arg_size, msg.arg);
 		if( msg.arg_pass.handler != NULL)
 			( *( int(*)(message_arg_t,int,int,void*) ) msg.arg_pass.handler ) (msg.arg_pass, msg.result, msg.arg_size, msg.arg);
 		break;
@@ -1551,6 +1669,7 @@ static int heart_beat_proc(void)
 		msg.sender = msg.receiver = SERVER_MIIO;
 		msg.arg_in.cat = info.status;
 		msg.arg_in.dog = info.thread_start;
+		msg.arg_in.duck = info.thread_exit;
 		ret = manager_message(&msg);
 		/***************************/
 	}
@@ -1587,14 +1706,23 @@ static void task_default(void)
 	int ret = 0;
 	switch( info.status){
 		case STATUS_NONE:
-			ret = config_miio_read(&config);
-			if( ret == 0 )
-				server_set_status(STATUS_TYPE_STATUS, STATUS_WAIT);
+			if( !misc_get_bit( info.thread_exit, MIIO_INIT_CONDITION_CONFIG ) ) {
+				ret = config_miio_read(&config);
+				if( !ret && misc_full_bit(config.status, CONFIG_MIIO_MODULE_NUM) ) {
+					misc_set_bit(&info.thread_exit, MIIO_INIT_CONDITION_CONFIG, 1);
+				}
+				else {
+					info.status = STATUS_ERROR;
+					break;
+				}
+			}
+			if( misc_full_bit( info.thread_exit, MIIO_INIT_CONDITION_NUM ) )
+				info.status = STATUS_WAIT;
 			else
-				sleep(1);
+				usleep(100000);
 			break;
 		case STATUS_WAIT:
-			server_set_status(STATUS_TYPE_STATUS, STATUS_SETUP);
+			info.status = STATUS_SETUP;
 			break;
 		case STATUS_SETUP:
 			ret = miio_rsv_init(NULL);
@@ -1692,11 +1820,11 @@ int server_miio_start(void)
 	pthread_rwlock_init(&info.lock, NULL);
 	ret = pthread_create(&info.id, NULL, server_func, NULL);
 	if(ret != 0) {
-		log_err("miss server create error! ret = %d",ret);
+		log_err("miio server create error! ret = %d",ret);
 		 return ret;
 	 }
 	else {
-		log_err("miss server create successful!");
+		log_err("miio server create successful!");
 		return 0;
 	}
 }

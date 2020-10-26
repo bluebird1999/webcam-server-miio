@@ -44,6 +44,8 @@
 #define OT_REG_STR_TEMPLATE			"{\"id\": %d,\"method\": \"properties_changed\",\"params\":\
 									[{\"did\" : \"%s\",\"siid\" : %d,\"piid\" : %d,\"value\" : \"%s\"}]}"
 
+#define		MIIO_INIT_CONDITION_NUM				1
+#define		MIIO_INIT_CONDITION_CONFIG			0
 
 /*
  * structure
@@ -81,6 +83,7 @@ typedef enum{
 typedef struct miio_info_t {
 	miio_status_t	miio_status;
 	int				time_sync;
+	int				did_acquired;
 } miio_info_t;
 
 /*
