@@ -31,7 +31,7 @@
 #include <json-c/json.h>
 #include <miss.h>
 #include <malloc.h>
-#include <dmalloc.h>
+//#include <dmalloc.h>
 //program header
 #include "../../tools/tools_interface.h"
 #include "../../server/miss/miss_local.h"
@@ -41,6 +41,7 @@
 #include "../../server/audio/audio_interface.h"
 #include "../../server/recorder/recorder_interface.h"
 #include "../../server/device/device_interface.h"
+#include "../../server/video2/video2_interface.h"
 //server header
 #include "mi.h"
 #include "miio.h"
@@ -99,7 +100,7 @@ static int miio_action_func(int id,char *did,int siid,int aiid,cJSON *json_in);
 static int miio_action_func_ack(message_arg_t arg_pass, int result, int size, void *arg);
 static int miot_properties_changed(int piid,int siid,int value, char* string);
 static int miio_query_device_did(void);
-static int miio_parse_did(char*);
+static int miio_parse_did(char* msg, char *key);
 
 /*
  * %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -614,9 +615,13 @@ static int miio_set_properties_vlaue(int id, char *did, int piid, int siid, cJSO
 		}
 		else if(piid == IID_2_2_ImageRollover) {
             log_info("IID_2_2_ImageRollover:%d \n",value_json->valueint);
+/*
 			send_complicate_request(&msg, MSG_VIDEO_CTRL_EXT, SERVER_VIDEO, id, piid, siid,
 					VIDEO_CTRL_IMAGE_ROLLOVER, &(value_json->valueint), sizeof(int),miio_set_properties_callback);
-			return -1;
+*/
+			send_complicate_request(&msg, MSG_VIDEO_CTRL_DIRECT, SERVER_VIDEO, id, piid, siid,
+					VIDEO_CTRL_IMAGE_ROLLOVER, &(value_json->valueint), sizeof(int),miio_set_properties_callback);
+            return -1;
 		}
 		else if(piid == IID_2_3_NightShot) {
 			log_info("IID_2_3_NightShot:%d ",value_json->valueint);
@@ -1001,14 +1006,14 @@ static int miio_event(const char *msg)
 	return 0;
 }
 
-int miio_parse_did(char *msg)
+int miio_parse_did(char *msg, char *key)
 {
     int ret = 0;
     char local_did[32] = {0};
 	char *pA = NULL, *pB = NULL, *pC = NULL;
 	char buf[64] = {0};
 	int len = 0;
-	char key = "params";
+	//char *key = "params";
 	if (strlen(key) > 59) {
 		log_err( "key(%s) len is too long(%d), max len(59)!\n", key, strlen(key));
 		return -1;
@@ -1120,12 +1125,13 @@ next_level:
 			for( char sent=0;(sent < MAX_ASYN_SEND_TRY) && server_video_message(&message);sent++ ) {};
 			for( char sent=0;(sent < MAX_ASYN_SEND_TRY) && server_recorder_message(&message);sent++ ) {};
 			for( char sent=0;(sent < MAX_ASYN_SEND_TRY) && server_player_message(&message);sent++ ) {};
+			for( char sent=0;(sent < MAX_ASYN_SEND_TRY) && server_video2_message(&message);sent++ ) {};
 			/********message body********/
        }
        return 0;
     }
     if ( config.iot.board_type && (id == did_rpc_id) ) {
-       ret = miio_parse_did(msg);
+       ret = miio_parse_did(msg, "params");
        if(ret < 0 ){
             log_err("http_jason_get_device_did error\n");
        }
@@ -1357,9 +1363,9 @@ static void *miio_poll_func(void *arg)
 	int n=0;
 	int i;
 	server_status_t st;
-
     signal(SIGINT, server_thread_termination);
     signal(SIGTERM, server_thread_termination);
+    signal(SIGSEGV, manager_sigsegv);
 	misc_set_thread_name("server_miio_poll");
     pthread_detach(pthread_self());
 	while ( (n >= 0) && ( !server_get_status(STATUS_TYPE_EXIT) ) ) {
@@ -1427,6 +1433,7 @@ static void *miio_rsv_func(void *arg)
     int st;
     signal(SIGINT, server_thread_termination);
     signal(SIGTERM, server_thread_termination);
+    signal(SIGSEGV, manager_sigsegv);
     misc_set_thread_name("server_miio_rsv");
     pthread_detach(pthread_self());
 	while( !server_get_status(STATUS_TYPE_EXIT) ) {
@@ -1774,6 +1781,7 @@ static void *server_func(void)
 {
     signal(SIGINT, server_thread_termination);
     signal(SIGTERM, server_thread_termination);
+    signal(SIGSEGV, manager_sigsegv);
 	misc_set_thread_name("server_miio");
 	pthread_detach(pthread_self());
 	//default task
