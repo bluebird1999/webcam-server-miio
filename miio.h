@@ -14,6 +14,7 @@
  */
 #include <stdio.h>
 #include <poll.h>
+#include "miio_interface.h"
 /*
  * define
  */
@@ -50,20 +51,6 @@
 /*
  * structure
  */
-typedef enum miio_status_t {
-	STATE_DEVICE_INIT,
-	STATE_DIDKEY_REQ1,
-	STATE_DIDKEY_REQ2,
-	STATE_DIDKEY_DONE,
-	STATE_TOKEN_DONE,
-	STATE_WIFI_AP_MODE,
-	STATE_WIFI_STA_MODE,
-	STATE_CLOUD_TRYING,
-	STATE_CLOUD_CONNECTED,
-	STATE_CLOUD_CONNECT_RETRY,
-} miio_status_t;
-
-
 typedef struct msg_helper_t {
 	struct pollfd pollfds[MAX_POLL_FDS];
 	int count_pollfds;
