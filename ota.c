@@ -144,7 +144,7 @@ int ota_get_state_ack(int mid, int type, int status, int progress)
 int ota_get_state(const char *msg)
 {
     int ret = -1, id = 0;
-    log_info("method:miIO.get_ota_state\n");
+    log_qcy(DEBUG_SERIOUS, "method:miIO.get_ota_state");
     ret = json_verify_get_int(msg, "id", &id);
     if (ret < 0) {
         return ret;
@@ -166,7 +166,7 @@ int ota_get_state(const char *msg)
 int ota_get_progress(const char *msg)
 {
     int ret = -1, id = 0;
-    log_info("method:miIO.get_ota_progress\n");
+    log_qcy(DEBUG_SERIOUS, "method:miIO.get_ota_progress");
     ret = json_verify_get_int(msg, "id", &id);
     if (ret < 0 ) {
         return ret;
@@ -244,7 +244,7 @@ int ota_init(const char *msg)
     char *ptr = NULL;
     int ota_mode = 0;
     int ota_proc = 0;
-    log_info("method:miIO.ota\n");
+    log_qcy(DEBUG_SERIOUS, "method:miIO.ota");
     ret = json_verify_get_int(msg, "id", &id);
     json=cJSON_Parse(msg);
     object = cJSON_GetObjectItem(json,"params");
@@ -265,7 +265,7 @@ int ota_init(const char *msg)
         if(item_mode) {
             sprintf(mode,"%s",item_mode->valuestring);
         }
-        log_info("params: app_url:%s, file_md5:%s, proc:%s, mode:%s\n",config.url,config.md5,proc,mode);
+        log_qcy(DEBUG_SERIOUS, "params: app_url:%s, file_md5:%s, proc:%s, mode:%s",config.url,config.md5,proc,mode);
     }
     if(strlen(mode) != 0) {
         ptr = strstr(mode, "silent");
@@ -279,7 +279,7 @@ int ota_init(const char *msg)
     else {
     	config.mode = OTA_MODE_NORMAL;
     }
-    log_info("mode is %s/%d\n",mode,config.mode);
+    log_qcy(DEBUG_SERIOUS, "mode is %s/%d",mode,config.mode);
     if(strlen(proc) != 0) {
         ptr = strstr(proc, "dnld");
         if(ptr) {
@@ -301,7 +301,7 @@ int ota_init(const char *msg)
     else {
     	config.proc = OTA_PROC_DNLD_INSTALL;
     }
-    log_info("proc is %s/%d\n",proc,config.proc);
+    log_qcy(DEBUG_SERIOUS, "proc is %s/%d",proc,config.proc);
 //
 	msg_id = misc_generate_random_id();
     /********message body********/

@@ -20,9 +20,9 @@
 #include <time.h>
 #include <json-c/json.h>
 #include <malloc.h>
-#include <dmalloc.h>
 //program header
 #include "../../tools/tools_interface.h"
+#include "../../manager/manager_interface.h"
 //server header
 #include "ntp.h"
 
@@ -50,11 +50,11 @@ static int ntp_change_system_time(struct timeval newtime)
     struct timeval tv;
 	ret = settimeofday(&newtime, NULL);
 	if(ret == -1) {
-		log_err("mod systemTime settimeofday error\n");
+		log_qcy(DEBUG_SERIOUS, "mod systemTime settimeofday error");
 		return -1;
 	}
     gettimeofday (&tv, NULL);
-    log_info("after ntp set time,get tv_sec; %ld\n", tv.tv_sec);
+    log_qcy(DEBUG_SERIOUS, "after ntp set time,get tv_sec; %ld", tv.tv_sec);
 	return 0;
 }
 
@@ -65,7 +65,7 @@ static int ntp_parse_jason(char* msg, char* key, char*value, int max_len)
 	char buf[64] = {0};
 	int len = 0;
 	if (strlen(key) > 59) {
-		log_err( "key(%s) len is too long(%d), max len(59)!\n", key, strlen(key));
+		log_qcy(DEBUG_SERIOUS,  "key(%s) len is too long(%d), max len(59)!", key, strlen(key));
 		return -1;
 	}
 	sprintf(buf, "\"%s\":", key);
@@ -79,16 +79,16 @@ static int ntp_parse_jason(char* msg, char* key, char*value, int max_len)
 		if (pB != NULL) {
 			len = pB - pA;
 			if (len > max_len) {
-				log_err( "value len is too long(%d), max len(%d)!\n", len, max_len);
+				log_qcy(DEBUG_SERIOUS,  "value len is too long(%d), max len(%d)!", len, max_len);
 				return -1;
 			}
 			strncpy(value, pA, len);
 		} else {
-			log_err( "response url parse '%s' error!\n", key);
+			log_qcy(DEBUG_SERIOUS,  "response url parse '%s' error!", key);
 			return -1;
 		}
 	} else {
-		log_err( "response url don't have '%s'!\n", key);
+		log_qcy(DEBUG_SERIOUS,  "response url don't have '%s'!", key);
 		return -1;
 	}
 	return ret;
@@ -126,7 +126,7 @@ int ntp_time_parse(char *msg)
 
     ret = ntp_parse_jason(msg, "params", local_time, sizeof(local_time));
     if( ret == -1 ) {
-    	log_err("json string parse error\n");
+    	log_qcy(DEBUG_SERIOUS, "json string parse error");
     	return ret;
     }
     time_sec = atoll(local_time);
@@ -134,7 +134,7 @@ int ntp_time_parse(char *msg)
     timeval.tv_usec = 0;
     ret = ntp_change_system_time(timeval);
     if(ret < 0) {
-        log_err("mod systemTime error\n");
+        log_qcy(DEBUG_SERIOUS, "mod systemTime error");
     }
 
     return ret ;

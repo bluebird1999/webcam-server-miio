@@ -19,10 +19,10 @@
 #define		CONFIG_MIIO_IOT			0
 #define		CONFIG_MIIO_DEVICE		1
 
-#define 	CONFIG_MIIO_IOT_PATH				"/opt/qcy/config/miio_iot.config"
-#define		CONFIG_MIIO_DEVICE_PATH				"/etc/miio/device.conf"
-#define		CONFIG_MIIO_TOKEN_PATH				"/etc/miio/device.token"
-#define		CONFIG_MIIO_OSRELEASE_PATH			"/etc/miio/os-release"
+#define 	CONFIG_MIIO_IOT_PATH				"config/miio_iot.config"
+#define		CONFIG_MIIO_DEVICE_PATH				"device.conf"
+#define		CONFIG_MIIO_TOKEN_PATH				"device.token"
+#define		CONFIG_MIIO_OSRELEASE_PATH			"os-release"
 
 /*
  * structure

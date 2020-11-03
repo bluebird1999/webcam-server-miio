@@ -31,7 +31,6 @@
 #include <json-c/json.h>
 #include <miss.h>
 #include <malloc.h>
-//#include <dmalloc.h>
 //program header
 #include "../../tools/tools_interface.h"
 #include "../../server/miss/miss_local.h"
@@ -156,7 +155,7 @@ static int send_message(int receiver, message_t *msg)
 			st = manager_message(msg);
 			break;
 		default:
-			log_err("unknown message target! %d", receiver);
+			log_qcy(DEBUG_SERIOUS, "unknown message target! %d", receiver);
 			break;
 	}
 	return st;
@@ -194,7 +193,7 @@ static int miio_socket_init(void)
 
 	sockfd = socket(AF_INET, SOCK_STREAM, 0);
 	if (sockfd < 0) {
-		log_err("Create socket error: %m\n");
+		log_qcy(DEBUG_SERIOUS, "Create socket error: %m");
 		return -1;
 	}
 	bzero(&serveraddr, sizeof(serveraddr));
@@ -202,7 +201,7 @@ static int miio_socket_init(void)
 	serveraddr.sin_addr.s_addr = inet_addr(MIIO_IP);
 	serveraddr.sin_port = htons(MIIO_PORT);
 	if (connect(sockfd, (struct sockaddr *)&serveraddr, sizeof(serveraddr)) < 0) {
-		log_err("Connect to otd error: %s:%d\n", MIIO_IP, MIIO_PORT);
+		log_qcy(DEBUG_SERIOUS, "Connect to otd error: %s:%d", MIIO_IP, MIIO_PORT);
         close(sockfd);
 		return -1;
 	}
@@ -215,32 +214,32 @@ static int miio_socket_send(char *buf, int size)
 	ssize_t ret = 0;
 	ret = pthread_rwlock_wrlock(&info.lock);
 	if (ret) {
-		log_err("add session wrlock fail, ret = %d\n", ret);
+		log_qcy(DEBUG_SERIOUS, "add session wrlock fail, ret = %d", ret);
 		return -1;
 	}
 	if (msg_helper.otd_sock <= 0) {
-		log_warning("sock not ready: %d\n", msg_helper.otd_sock);
+		log_qcy(DEBUG_WARNING,"sock not ready: %d", msg_helper.otd_sock);
 		goto end;
 	}
 	if (size == 0)
 		goto end;
-	log_err("send: %s\n",buf);
+	log_qcy(DEBUG_VERBOSE, "send: %s",buf);
 	while (size > 0) {
 		ret = send(msg_helper.otd_sock, buf + sent, size, MSG_DONTWAIT | MSG_NOSIGNAL);
 		if (ret < 0) {
 			// FIXME EAGAIN
-			log_err("%s: send error: %s(%m)\n", __FILE__, __func__);
+			log_qcy(DEBUG_SERIOUS, "%s: send error: %s(%m)");
 			goto end;
 		}
 		if (ret < size)
-			log_warning("Partial written\n");
+			log_qcy(DEBUG_WARNING, "Partial written");
 		sent += ret;
 		size -= ret;
 	}
 end:
 	ret = pthread_rwlock_unlock(&info.lock);
 	if (ret) {
-		log_err("add session unlock fail, ret = %d\n", ret);
+		log_qcy(DEBUG_SERIOUS, "add session unlock fail, ret = %d", ret);
 	}
 	return sent;
 }
@@ -574,7 +573,7 @@ static int miio_get_properties(const char *msg)
 	int ret = -1, id = 0;
     cJSON *root_ack = 0;
 	char *ackbuf = 0;
-	log_info("----%s--------",msg);
+	log_qcy(DEBUG_INFO, "----%s--------",msg);
 	//get id
 	ret = json_verify_get_int(msg, "id", &id);
 	if (ret < 0) return ret;
@@ -692,7 +691,7 @@ static int miio_set_properties_vlaue(int id, char *did, int piid, int siid, cJSO
     switch(siid){
 		case IID_2_CameraControl:
 			if(piid == IID_2_1_On) {
-				log_info("IID_2_1_On:%d ",value_json->valueint);
+				log_qcy(DEBUG_INFO, "IID_2_1_On:%d ",value_json->valueint);
 				if( value_json->valueint == 1) {
 					msg.message = MSG_VIDEO_START;
 					msg.arg_in.cat = VIDEO_PROPERTY_SWITCH;
@@ -706,7 +705,7 @@ static int miio_set_properties_vlaue(int id, char *did, int piid, int siid, cJSO
 				return -1;
 			}
 			else if(piid == IID_2_2_ImageRollover) {
-				log_info("IID_2_2_ImageRollover:%d \n",value_json->valueint);
+				log_qcy(DEBUG_INFO, "IID_2_2_ImageRollover:%d ",value_json->valueint);
 				msg.message = MSG_VIDEO_PROPERTY_SET_EXT;
 				msg.arg_in.cat = VIDEO_PROPERTY_IMAGE_ROLLOVER;
 				msg.arg = &(value_json->valueint);
@@ -715,7 +714,7 @@ static int miio_set_properties_vlaue(int id, char *did, int piid, int siid, cJSO
 				return -1;
 			}
 			else if(piid == IID_2_3_NightShot) {
-				log_info("IID_2_3_NightShot:%d ",value_json->valueint);
+				log_qcy(DEBUG_INFO, "IID_2_3_NightShot:%d ",value_json->valueint);
 				msg.message = MSG_VIDEO_PROPERTY_SET_DIRECT;
 				msg.arg_in.cat = VIDEO_PROPERTY_NIGHT_SHOT;
 				msg.arg = &(value_json->valueint);
@@ -724,7 +723,7 @@ static int miio_set_properties_vlaue(int id, char *did, int piid, int siid, cJSO
 				return -1;
 			}
 			else if(piid == IID_2_4_TimeWatermark) {
-				log_info("IID_2_4_TimeWatermark:%d ",value_json->valueint);
+				log_qcy(DEBUG_INFO, "IID_2_4_TimeWatermark:%d ",value_json->valueint);
 				msg.message = MSG_VIDEO_PROPERTY_SET_EXT;
 				msg.arg_in.cat = VIDEO_PROPERTY_TIME_WATERMARK;
 				msg.arg = &(value_json->valueint);
@@ -733,7 +732,7 @@ static int miio_set_properties_vlaue(int id, char *did, int piid, int siid, cJSO
 				return -1;
 			}
 			else if(piid == IID_2_7_RecordingMode) {
-				log_info("IID_2_7_RecordingMode:%d ",value_json->valueint);
+				log_qcy(DEBUG_INFO, "IID_2_7_RecordingMode:%d ",value_json->valueint);
 				msg.message = MSG_RECORDER_PROPERTY_SET;
 				msg.arg_in.cat = RECORDER_PROPERTY_RECORDING_MODE;
 				msg.arg = &(value_json->valueint);
@@ -744,7 +743,7 @@ static int miio_set_properties_vlaue(int id, char *did, int piid, int siid, cJSO
 			return -1;
 		case IID_3_IndicatorLight:
 			if(piid == IID_3_1_On) {
-				log_info("IID_3_1_On:%d ",value_json->valueint);
+				log_qcy(DEBUG_INFO, "IID_3_1_On:%d ",value_json->valueint);
 				device_iot_config_t tmp;
 				memset(&tmp, 0, sizeof(device_iot_config_t));
 				tmp.led1_onoff = value_json->valueint;
@@ -761,7 +760,7 @@ static int miio_set_properties_vlaue(int id, char *did, int piid, int siid, cJSO
 			break;
 		case IID_5_MotionDetection:
 			if(piid == IID_5_1_MotionDetection) {
-				log_info("IID_5_1_MotionDetection:%d ",value_json->valueint);
+				log_qcy(DEBUG_INFO, "IID_5_1_MotionDetection:%d ",value_json->valueint);
 				msg.message = MSG_VIDEO_PROPERTY_SET;
 				msg.arg_in.cat = VIDEO_PROPERTY_MOTION_SWITCH;
 				msg.arg = &(value_json->valueint);
@@ -770,7 +769,7 @@ static int miio_set_properties_vlaue(int id, char *did, int piid, int siid, cJSO
 				return -1;
 			}
 			else if(piid == IID_5_2_AlarmInterval) {
-				log_info("IID_5_2_AlarmInterval:%d ",value_json->valueint);
+				log_qcy(DEBUG_INFO, "IID_5_2_AlarmInterval:%d ",value_json->valueint);
 				msg.message = MSG_VIDEO_PROPERTY_SET;
 				msg.arg_in.cat = VIDEO_PROPERTY_MOTION_ALARM_INTERVAL;
 				msg.arg = &(value_json->valueint);
@@ -779,7 +778,7 @@ static int miio_set_properties_vlaue(int id, char *did, int piid, int siid, cJSO
 				return -1;
 			}
 			else if(piid == IID_5_3_DetectionSensitivity) {
-				log_info("IID_5_3_DetectionSensitivity:%d ",value_json->valueint);
+				log_qcy(DEBUG_INFO, "IID_5_3_DetectionSensitivity:%d ",value_json->valueint);
 				msg.message = MSG_VIDEO_PROPERTY_SET;
 				msg.arg_in.cat = VIDEO_PROPERTY_MOTION_SENSITIVITY;
 				msg.arg = &(value_json->valueint);
@@ -788,7 +787,7 @@ static int miio_set_properties_vlaue(int id, char *did, int piid, int siid, cJSO
 				return -1;
 			}
 			else if(piid == IID_5_4_MotionDetectionStartTime) {
-				log_info("IID_5_4_MotionDetectionStartTime:%s ",value_json->valuestring);
+				log_qcy(DEBUG_INFO, "IID_5_4_MotionDetectionStartTime:%s ",value_json->valuestring);
 				msg.message = MSG_VIDEO_PROPERTY_SET_DIRECT;
 				msg.arg_in.cat = VIDEO_PROPERTY_MOTION_START;
 				msg.arg = value_json->valuestring;
@@ -797,7 +796,7 @@ static int miio_set_properties_vlaue(int id, char *did, int piid, int siid, cJSO
 				return -1;
 			}
 			else if(piid == IID_5_5_MotionDetectionEndTime) {
-				log_info("IID_5_4_MotionDetectionEndTime:%s ",value_json->valuestring);
+				log_qcy(DEBUG_INFO, "IID_5_4_MotionDetectionEndTime:%s ",value_json->valuestring);
 				msg.message = MSG_VIDEO_PROPERTY_SET_DIRECT;
 				msg.arg_in.cat = VIDEO_PROPERTY_MOTION_END;
 				msg.arg = value_json->valuestring;
@@ -808,14 +807,14 @@ static int miio_set_properties_vlaue(int id, char *did, int piid, int siid, cJSO
 			break;
 		case IID_6_MoreSet:
 			if(piid == IID_6_6_TimeZone) {
-				log_info("IID_6_6_TimeZone:%d ",value_json->valueint);
+				log_qcy(DEBUG_INFO, "IID_6_6_TimeZone:%d ",value_json->valueint);
 	/*			send_complicate_request(&msg, MSG_KERNEL_CTRL_DIRECT, SERVER_KERNEL, id, piid, siid,
 						KERNEL_CTRL_TIMEZONE, &(value_json->valueint), sizeof(int),miio_set_properties_callback);
 	*/
 				return -1;
 			}
 			else if(piid == IID_6_7_StorageSwitch) {
-				log_info("IID_6_7_StorageSwitch:%d ",value_json->valueint);
+				log_qcy(DEBUG_INFO, "IID_6_7_StorageSwitch:%d ",value_json->valueint);
 				msg.message = MSG_RECORDER_PROPERTY_SET;
 				msg.arg_in.cat = RECORDER_PROPERTY_SAVE_MODE;
 				msg.arg = &(value_json->valueint);
@@ -824,13 +823,13 @@ static int miio_set_properties_vlaue(int id, char *did, int piid, int siid, cJSO
 				return -1;
 			}
 			else if(piid == IID_6_8_CloudUploadEnable) {
-				log_info("IID_6_8_CloudUploadEnable:%d ",value_json->valueint);
+				log_qcy(DEBUG_INFO, "IID_6_8_CloudUploadEnable:%d ",value_json->valueint);
 	//			send_complicate_request(&msg, MSG_MICLOUD_CTRL_DIRECT, SERVER_MICLOUD, id, piid, siid,
 	//					MICLOUD_CTRL_CLOUD_SAVE, &(value_json->valueint), sizeof(int),miio_set_properties_callback);
 				return -1;
 			}
 			else if(piid == IID_6_9_MotionAlarmPush) {
-				log_info("IID_6_9_MotionAlarmPush:%d ",value_json->valueint);
+				log_qcy(DEBUG_INFO, "IID_6_9_MotionAlarmPush:%d ",value_json->valueint);
 				msg.message = MSG_VIDEO_PROPERTY_SET;
 				msg.arg_in.cat = VIDEO_PROPERTY_CUSTOM_WARNING_PUSH;
 				msg.arg = &(value_json->valueint);
@@ -839,7 +838,7 @@ static int miio_set_properties_vlaue(int id, char *did, int piid, int siid, cJSO
 				return -1;
 			}
 			else if(piid == IID_6_10_DistortionSwitch) {
-				log_info("IID_6_10_DistortionSwitch:%d ",value_json->valueint);
+				log_qcy(DEBUG_INFO, "IID_6_10_DistortionSwitch:%d ",value_json->valueint);
 				msg.message = MSG_VIDEO_PROPERTY_SET_DIRECT;
 				msg.arg_in.cat = VIDEO_PROPERTY_CUSTOM_DISTORTION;
 				msg.arg = &(value_json->valueint);
@@ -982,7 +981,7 @@ static int miio_action_func_ack(message_arg_t arg_pass, int result, int size, vo
 			break;
 		case IID_3_IndicatorLight:
 			if(arg_pass.dog == IID_3_1_On) {
-				log_err("aaaaaaaa -----sss  IID_3_1_On");
+				log_qcy(DEBUG_INFO, "aaaaaaaa -----sss  IID_3_1_On");
 				if(!result) {
 					sprintf(ackbuf, OT_REG_OK_TEMPLATE, arg_pass.cat);
 				}
@@ -1013,14 +1012,14 @@ static int miio_action_func(int id,char *did,int siid,int aiid,cJSON *json_in)
     switch(siid) {
 		case IID_4_MemoryCardManagement:
 			if(aiid == IID_4_1_Format) {
-				log_info("IID_4_1_Format");
+				log_qcy(DEBUG_INFO, "IID_4_1_Format");
 				msg.message = MSG_DEVICE_ACTION;
 				msg.arg_in.cat = DEVICE_ACTION_SD_FORMAT;
 				send_message(SERVER_DEVICE, &msg);
 //				miot_properties_changed(IID_4_1_Status,IID_4_MemoryCardManagement,SD_CARD_FORMATING,0);
 			}
 			else if(aiid == IID_4_2_PopUp) {
-				log_info("IID_4_2_PopUp");
+				log_qcy(DEBUG_INFO, "IID_4_2_PopUp");
 				msg.message = MSG_DEVICE_CTRL_DIRECT;
 				msg.arg_in.cat = DEVICE_ACTION_SD_UMOUNT;
 				send_message(SERVER_DEVICE, &msg);
@@ -1029,7 +1028,7 @@ static int miio_action_func(int id,char *did,int siid,int aiid,cJSON *json_in)
 			break;
 /*		case IID_6_MoreSet:
 			if(aiid == IID_6_1_Reboot) {
-				log_info("IID_6_1_Reboot");
+				log_qcy(DEBUG_SERIOUS, "IID_6_1_Reboot");
 				send_complicate_request(&msg, MSG_KERNEL_ACTION, SERVER_KERNEL, id, aiid, siid,
 						KERNEL_ACTION_REBOOT, 0, 0);
 			}
@@ -1047,7 +1046,7 @@ static int miio_action(const char *msg)
     char did[32];
     int siid = 0,aiid = 0;
 	int ret = -1, id = 0;
-	log_info("method:action\n");
+	log_qcy(DEBUG_INFO, "method:action");
 	//get id
 	ret = json_verify_get_int(msg, "id", &id);
 	if (ret < 0) {
@@ -1081,7 +1080,7 @@ static int miio_set_timezone(const char *msg)
 	cJSON *json,*arrayItem,*object,*item;
     int i=0, ret = 0, id;
     message_t message;
-	log_info("method:set_timezone\n");
+	log_qcy(DEBUG_INFO, "method:set_timezone");
 	//get id
 	ret = json_verify_get_int(msg, "id", &id);
 	if (ret < 0) {
@@ -1111,7 +1110,7 @@ static int miio_set_timezone(const char *msg)
 
 static int miio_result_parse(const char *msg,int id)
 {
-    log_info("msg: %s, strlen: %d",msg, (int)strlen(msg));
+    log_qcy(DEBUG_INFO, "msg: %s, strlen: %d",msg, (int)strlen(msg));
     return 0;
 }
 
@@ -1123,38 +1122,38 @@ static int miio_event(const char *msg)
 		return -1;
 	new_obj = json_tokener_parse(msg);
 	if (NULL == new_obj) {
-		log_err("%s: Not in json format: %s\n", __func__, msg);
+		log_qcy(DEBUG_WARNING, "%s: Not in json format: %s", __func__, msg);
 		return -1;
 	}
 	if (!json_object_object_get_ex(new_obj, "params", &params)) {
-		log_err("%s: get params error\n", __func__);
+		log_qcy(DEBUG_WARNING, "%s: get params error", __func__);
 		json_object_put(new_obj);
 		return -1;
 	}
 	if (!json_object_object_get_ex(params, "code", &tmp_obj)) {
-		log_err("%s: get code error\n", __func__);
+		log_qcy(DEBUG_WARNING, "%s: get code error", __func__);
 		json_object_put(new_obj);
 		return -1;
 	}
 	if (json_object_get_type(tmp_obj) != json_type_int) {
-		log_err("%s: code not int: %s\n", __func__, msg);
+		log_qcy(DEBUG_WARNING, "%s: code not int: %s", __func__, msg);
 		json_object_put(new_obj);
 		return -1;
 	}
 	code = json_object_get_int(tmp_obj);
 	if (!json_object_object_get_ex(params, "ts", &tmp_obj)) {
-		log_err("%s: get ts error\n", __func__);
+		log_qcy(DEBUG_WARNING, "%s: get ts error", __func__);
 		json_object_put(new_obj);
 		return -1;
 	}
 	if (json_object_get_type(tmp_obj) != json_type_int) {
-		log_err("%s: ts not int: %s\n", __func__, msg);
+		log_qcy(DEBUG_WARNING, "%s: ts not int: %s", __func__, msg);
 		json_object_put(new_obj);
 		return -1;
 	}
 	json_object_get_int(tmp_obj);
 	if (code == -90) {
-		log_err("TUTK bug: -90, ignore this because interval < 60s.\n");
+		log_qcy(DEBUG_WARNING, "TUTK bug: -90, ignore this because interval < 60s.");
 	}
 	json_object_put(new_obj);
 	return 0;
@@ -1169,7 +1168,7 @@ int miio_parse_did(char *msg, char *key)
 	int len = 0;
 	//char *key = "params";
 	if (strlen(key) > 59) {
-		log_err( "key(%s) len is too long(%d), max len(59)!\n", key, strlen(key));
+		log_qcy(DEBUG_WARNING,  "key(%s) len is too long(%d), max len(59)!", key, strlen(key));
 		return -1;
 	}
 	sprintf(buf, "\"%s\":", key);
@@ -1183,16 +1182,16 @@ int miio_parse_did(char *msg, char *key)
 		if (pB != NULL) {
 			len = pB - pA;
 			if (len > 32) {
-				log_err( "value len is too long(%d), max len(32)!\n", len);
+				log_qcy(DEBUG_WARNING,  "value len is too long(%d), max len(32)!", len);
 				return -1;
 			}
 			strncpy(local_did, pA, len);
 		} else {
-			log_err( "response url parse '%s' error!\n", key);
+			log_qcy(DEBUG_WARNING,  "response url parse '%s' error!", key);
 			return -1;
 		}
 	} else {
-		log_err( "response url don't have '%s'!\n", key);
+		log_qcy(DEBUG_WARNING,  "response url don't have '%s'!", key);
 		return -1;
 	}
     strcpy(config.device.did, local_did);
@@ -1250,7 +1249,7 @@ next_level:
     if ( id == ntp_get_rpc_id() ) {
        ret = ntp_time_parse(msg);
        if(ret < 0 ){
-            log_err("http_jason_get_timeInt error\n");
+            log_qcy(DEBUG_WARNING, "http_jason_get_timeInt error");
        }
        else{
 			miio_info.time_sync = 1;
@@ -1271,7 +1270,7 @@ next_level:
     if ( config.iot.board_type && (id == did_rpc_id) ) {
        ret = miio_parse_did(msg, "params");
        if(ret < 0 ){
-            log_err("http_jason_get_device_did error\n");
+            log_qcy(DEBUG_WARNING, "http_jason_get_device_did error");
        }
        else{
     	   miio_info.did_acquired = 1;
@@ -1296,7 +1295,7 @@ next_level:
 	message.arg = msg;
 	message.arg_size = len + 1;
 	ret = server_miss_message(&message);
-	log_info("this miss rpc message = %s, len = %d", msg, len);
+	log_qcy(DEBUG_INFO, "this miss rpc message = %s, len = %d", msg, len);
 	/********message body********/
 	//result
 	if (json_verify_method(msg, "result") == 0) {
@@ -1326,13 +1325,13 @@ next_level:
         ret = ota_get_progress(msg);
 	}
 	else if (json_verify_method_value(msg, "method", "miIO.event", json_type_string) == 0) {
-		log_info("miIO.event: %s\n", msg);
+		log_qcy(DEBUG_INFO, "miIO.event: %s", msg);
 		sprintf(ackbuf, OT_ACK_SUC_TEMPLATE, id);
 		ret = miio_socket_send(ackbuf, strlen(ackbuf));
 		miio_event(msg);
 	}
 	else if (json_verify_method_value(msg, "method", "miss.set_vendor", json_type_string) == 0) {
-		log_info("miss.set_vendor: %s\n", msg);
+		log_qcy(DEBUG_INFO, "miss.set_vendor: %s", msg);
 //		ret = miss_rpc_process(NULL, msg, len);
 		/********message body********/
 		msg_init(&message);
@@ -1351,7 +1350,7 @@ next_level:
 //		ret = iot_miio_restore(id);
     }
     else {
-        log_err("msg:%s ,strlen: %d, len: %d\n",msg, (int)strlen(msg), len);
+        log_qcy(DEBUG_INFO, "msg:%s ,strlen: %d, len: %d",msg, (int)strlen(msg), len);
     }
 	return ret;
 }
@@ -1371,19 +1370,19 @@ static int miio_recv_handler(int sockfd)
 		}
 		if (count == 0) {
 			if (first_read) {
-				log_err("iot_close_retry\n");
+				log_qcy(DEBUG_WARNING, "iot_close_retry");
 //				miio_close_retry();
 			}
 			if (left_len) {
 				buf[left_len] = '\0';
-				log_warning("%s() remain str: %s\n", __func__, buf);
+				log_qcy(DEBUG_WARNING,"%s() remain str: %s", __func__, buf);
 			}
 			return 0;
 		}
 		first_read = false;
 		ret = miio_recv_handler_block(sockfd, buf, count + left_len);
 		if (ret < 0) {
-			log_warning("%s_one() return -1\n", __func__);
+			log_qcy(DEBUG_WARNING,"%s_one() return -1", __func__);
 			return -1;
 		}
 		left_len = count + left_len - ret;
@@ -1408,7 +1407,7 @@ static int miio_recv_handler_block(int sockfd, char *msg, int msg_len)
         miio_message_queue_t msg_queue;
         json = json_tokener_parse_ex(tok, msg, msg_len);
 		if (json == NULL) {
-			log_warning("%s(), token parse error msg: %.*s, length: %d bytes\n",
+			log_qcy(DEBUG_WARNING,"%s(), token parse error msg: %.*s, length: %d bytes",
 				    __func__, msg_len, msg, msg_len);
 			json_tokener_free(tok);
 			return ret;
@@ -1416,7 +1415,7 @@ static int miio_recv_handler_block(int sockfd, char *msg, int msg_len)
 		tmplen = tok->char_offset;
 		tmpstr = malloc(tmplen);
 		if (tmpstr == NULL) {
-			log_warning("%s(), malloc error\n", __func__);
+			log_qcy(DEBUG_WARNING,"%s(), malloc error", __func__);
 			json_tokener_free(tok);
 			json_object_put(json);
 			return -1;
@@ -1428,7 +1427,7 @@ static int miio_recv_handler_block(int sockfd, char *msg, int msg_len)
         memset(msg_queue.msg_buf, 0, sizeof(msg_queue.msg_buf));
         memcpy(msg_queue.msg_buf, tmpstr, tmplen);
         free(tmpstr);
-		log_warning("%s, len:%d\n",msg_queue.msg_buf,msg_queue.len);
+		log_qcy("%s, len:%d",msg_queue.msg_buf,msg_queue.len);
         miio_send_msg_queue(message_id,&msg_queue);
 		json_object_put(json);
 		ret += tok->char_offset;
@@ -1458,7 +1457,7 @@ static void miio_close_retry(void)
 		if (found)
 			msg_helper.count_pollfds--;
 		else
-			log_warning("kit.otd_sock (%d) not in pollfds.\n", msg_helper.otd_sock);
+			log_qcy(DEBUG_WARNING,"kit.otd_sock (%d) not in pollfds.", msg_helper.otd_sock);
 		close(msg_helper.otd_sock);
 		msg_helper.otd_sock = 0;
 	}
@@ -1471,11 +1470,11 @@ static int miio_rsv_init(void *param)
 
     message_id = miio_create_msg_queue();
     if(message_id == -1) {
-        log_err("xm_createMsgQueue failed");
+        log_qcy(DEBUG_SERIOUS, "xm_createMsgQueue failed");
     	return -1;
     }
     if ((ret = pthread_create(&message_tid, NULL, miio_rsv_func, param))) {
-    	printf("create miio message rsv handler, ret=%d\n", ret);
+    	log_qcy(DEBUG_INFO, "create miio message rsv handler, ret=%d", ret);
     	return -1;
     }
     return 0;
@@ -1494,7 +1493,7 @@ static int miio_poll_init(void *param)
         conn++;
     }while(msg_helper.otd_sock == -1 && conn < MAX_SOCKET_TRY);
     if( conn >= MAX_SOCKET_TRY) {
-    	log_err("socket failed!");
+    	log_qcy(DEBUG_SERIOUS, "socket failed!");
     	return -1;
     }
 	if (msg_helper.otd_sock >= 0) {
@@ -1503,7 +1502,7 @@ static int miio_poll_init(void *param)
 		msg_helper.count_pollfds++;
 	}
     if ((ret = pthread_create(&message_tid, NULL, miio_poll_func, param))) {
-    	log_err("create mi message handler, ret=%d\n", ret);
+    	log_qcy(DEBUG_SERIOUS, "create mi message handler, ret=%d", ret);
     	return -1;
     }
     return 0;
@@ -1544,15 +1543,15 @@ static void *miio_poll_func(void *arg)
 			}
 			else if (msg_helper.pollfds[i].revents & POLLOUT) {
 				if (msg_helper.pollfds[i].fd == msg_helper.otd_sock)
-					log_info("POLLOUT fd: %d\n", msg_helper.otd_sock);
+					log_qcy(DEBUG_WARNING, "POLLOUT fd: %d", msg_helper.otd_sock);
 				n--;
 			}
 			else if (msg_helper.pollfds[i].revents & (POLLNVAL | POLLHUP | POLLERR)) {
 				int j = i;
-				log_warning("POLLNVAL | POLLHUP | POLLERR fd: pollfds[%d]: %d, revents: 0x%08x\n",
+				log_qcy(DEBUG_WARNING,"POLLNVAL | POLLHUP | POLLERR fd: pollfds[%d]: %d, revents: 0x%08x",
 					    i, msg_helper.pollfds[i].fd, msg_helper.pollfds[i].revents);
 				if (msg_helper.pollfds[i].fd == msg_helper.otd_sock) {
-					log_err("iot_close_retry \n");
+					log_qcy(DEBUG_WARNING, "iot_close_retry ");
 					miio_close_retry();
 					n--;
 					continue;
@@ -1568,10 +1567,10 @@ static void *miio_poll_func(void *arg)
 		}
 	}
 	if (msg_helper.otd_sock > 0) {
-		log_err("close miio.otd_sock\n");
+		log_qcy(DEBUG_WARNING, "close miio.otd_sock");
 		close(msg_helper.otd_sock);
 	}
-	log_info("-----------thread exit: server_miio_poll-----------");
+	log_qcy(DEBUG_INFO, "-----------thread exit: server_miio_poll-----------");
 	server_set_status(STATUS_TYPE_THREAD_START, THREAD_POLL, 0);
 	pthread_exit(0);
 }
@@ -1605,7 +1604,7 @@ static void *miio_rsv_func(void *arg)
 			usleep(1000);//1ms
 		}
     }
-	log_info("-----------thread exit: server_miio_rsv-----------");
+	log_qcy(DEBUG_INFO, "-----------thread exit: server_miio_rsv-----------");
 	server_set_status(STATUS_TYPE_THREAD_START, THREAD_RSV, 0);
 	pthread_exit(0);
 }
@@ -1615,7 +1614,7 @@ static int server_set_status(int type, int st, int value)
 	int ret=-1;
 	ret = pthread_rwlock_wrlock(&info.lock);
 	if(ret)	{
-		log_err("add lock fail, ret = %d", ret);
+		log_qcy(DEBUG_SERIOUS, "add lock fail, ret = %d", ret);
 		return ret;
 	}
 	if(type == STATUS_TYPE_STATUS)
@@ -1628,7 +1627,7 @@ static int server_set_status(int type, int st, int value)
 		misc_set_bit(&info.thread_start, st, value);
 	ret = pthread_rwlock_unlock(&info.lock);
 	if (ret)
-		log_err("add unlock fail, ret = %d", ret);
+		log_qcy(DEBUG_SERIOUS, "add unlock fail, ret = %d", ret);
 	return ret;
 }
 
@@ -1674,13 +1673,13 @@ static int rpc_send_msg(int msg_id, const char *method, const char *params)
 
 	struct json_object *params_obj = json_tokener_parse(params);
 	if (NULL == params_obj) {
-		log_err("%s: Not in json format: %s\n", __func__, params);
+		log_qcy(DEBUG_WARNING, "%s: Not in json format: %s", __func__, params);
 		return -1;
 	}
 
 	struct json_object *send_object = json_object_new_object();
 	if (NULL == send_object) {
-		log_err("%s: init send_object failed\n", __func__);
+		log_qcy(DEBUG_WARNING, "%s: init send_object failed", __func__);
 		return -1;
 	}
 
@@ -1692,10 +1691,10 @@ static int rpc_send_msg(int msg_id, const char *method, const char *params)
 	json_object_put(send_object);
 	//json_object_put(params_obj);
 	if (msg_helper.otd_sock == 0) {
-		log_err("rpc socket uninit\n");
+		log_qcy(DEBUG_WARNING, "rpc socket uninit");
 		return -1;
 	}
-	log_info("rpc_msg_send: %s\n", sendbuf);
+	log_qcy(DEBUG_INFO, "rpc_msg_send: %s", sendbuf);
 	ret = miio_socket_send(sendbuf, strlen(sendbuf));
 	if(ret > 0)
 		return 0;
@@ -1709,12 +1708,12 @@ static int rpc_send_report(int msg_id, const char *method, const char *params)
 		return -1;
 	struct json_object *send_object = json_object_new_object();
 	if (NULL == send_object) {
-		log_err("%s: init send_object failed\n", __func__);
+		log_qcy(DEBUG_WARNING, "%s: init send_object failed", __func__);
 		return -1;
 	}
 	struct json_object *params_obj = json_object_new_object();
 	if (NULL == params_obj) {
-		log_err("%s: init params_obj failed\n", __func__);
+		log_qcy(DEBUG_WARNING, "%s: init params_obj failed", __func__);
 		return -1;
 	}
 	json_object_object_add(params_obj, "data", json_object_new_string(params));
@@ -1725,7 +1724,7 @@ static int rpc_send_report(int msg_id, const char *method, const char *params)
 	sprintf(sendbuf, "%s", json_object_to_json_string_ext(send_object, JSON_C_TO_STRING_NOZERO));
 	json_object_put(send_object);
 	miio_socket_send(sendbuf,strlen(sendbuf));
-	log_info("rpc_report_send: %s\n", sendbuf);
+	log_qcy(DEBUG_INFO, "rpc_report_send: %s", sendbuf);
 	return 0;
 }
 
@@ -1738,13 +1737,13 @@ static int server_message_proc(void)
 	msg_init(&send_msg);
 	ret = pthread_rwlock_wrlock(&message.lock);
 	if(ret)	{
-		log_err("add message lock fail, ret = %d\n", ret);
+		log_qcy(DEBUG_SERIOUS, "add message lock fail, ret = %d", ret);
 		return ret;
 	}
 	ret = msg_buffer_pop(&message, &msg);
 	ret1 = pthread_rwlock_unlock(&message.lock);
 	if (ret1) {
-		log_err("add message unlock fail, ret = %d\n", ret1);
+		log_qcy(DEBUG_SERIOUS, "add message unlock fail, ret = %d", ret1);
 	}
 	if( ret == -1) {
 		msg_free(&msg);
@@ -1815,7 +1814,7 @@ static int server_message_proc(void)
 			/***************************/
 			break;
 		default:
-			log_err("not processed message = %d", msg.message);
+			log_qcy(DEBUG_SERIOUS, "not processed message = %d", msg.message);
 			break;
 	}
 	msg_free(&msg);
@@ -1851,22 +1850,21 @@ static void task_error(void)
 	unsigned int tick=0;
 	switch( info.status ) {
 		case STATUS_ERROR:
-			log_err("!!!!!!!!error in miio, restart in 5 s!");
-			info.tick = time_get_now_stamp();
+			log_qcy(DEBUG_SERIOUS, "!!!!!!!!error in miio, restart in 5 s!");
+			info.tick2 = time_get_now_stamp();
 			info.status = STATUS_NONE;
 			break;
 		case STATUS_NONE:
 			tick = time_get_now_stamp();
-			if( (tick - info.tick) > SERVER_RESTART_PAUSE ) {
+			if( (tick - info.tick2) > SERVER_RESTART_PAUSE ) {
 				info.exit = 1;
-				info.tick = tick;
+				info.tick2 = tick;
 			}
 			break;
 		default:
-			log_err("!!!!!!!unprocessed server status in task_error = %d", info.status);
+			log_qcy(DEBUG_SERIOUS, "!!!!!!!unprocessed server status in task_error = %d", info.status);
 			break;
 	}
-	usleep(1000);
 	return;
 }
 
@@ -1888,8 +1886,6 @@ static void task_default(void)
 			}
 			if( misc_full_bit( info.thread_exit, MIIO_INIT_CONDITION_NUM ) )
 				info.status = STATUS_WAIT;
-			else
-				sleep(1);
 			break;
 		case STATUS_WAIT:
 			info.status = STATUS_SETUP;
@@ -1933,10 +1929,9 @@ static void task_default(void)
 			info.task.func = task_error;
 			break;
 		default:
-			log_err("!!!!!!!unprocessed server status in task_default = %d", info.status);
+			log_qcy(DEBUG_SERIOUS, "!!!!!!!unprocessed server status in task_default = %d", info.status);
 			break;
 	}
-	usleep(1000);
 	return;
 }
 
@@ -1974,7 +1969,7 @@ static void *server_func(void)
 		/***************************/
 	}
 	server_release();
-	log_info("-----------thread exit: server_miio-----------");
+	log_qcy(DEBUG_INFO, "-----------thread exit: server_miio-----------");
 	pthread_exit(0);
 }
 
@@ -1995,11 +1990,11 @@ int server_miio_start(void)
 	int ret=-1;
 	ret = pthread_create(&info.id, NULL, server_func, NULL);
 	if(ret != 0) {
-		log_err("miio server create error! ret = %d",ret);
+		log_qcy(DEBUG_SERIOUS, "miio server create error! ret = %d",ret);
 		 return ret;
 	 }
 	else {
-		log_err("miio server create successful!");
+		log_qcy(DEBUG_INFO, "miio server create successful!");
 		return 0;
 	}
 }
@@ -2008,20 +2003,21 @@ int server_miio_message(message_t *msg)
 {
 	int ret=0,ret1=0;
 	if( !message.init ) {
-		log_err("miio server is not ready for message processing!");
+		log_qcy(DEBUG_INFO, "miio server is not ready for message processing!");
 		return -1;
 	}
 	ret = pthread_rwlock_wrlock(&message.lock);
 	if(ret)	{
-		log_err("add message lock fail, ret = %d\n", ret);
+		log_qcy(DEBUG_SERIOUS, "add message lock fail, ret = %d", ret);
 		return ret;
 	}
 	ret = msg_buffer_push(&message, msg);
-	log_info("push into the miio message queue: sender=%d, message=%x, ret=%d", msg->sender, msg->message, ret);
+	log_qcy(DEBUG_VERBOSE, "push into the miio message queue: sender=%d, message=%x, ret=%d, head=%d, tail=%d", msg->sender, msg->message, ret,
+			message.head, message.tail);
 	if( ret!=0 )
-		log_err("message push in miio error =%d", ret);
+		log_qcy(DEBUG_WARNING, "message push in miio error =%d", ret);
 	ret1 = pthread_rwlock_unlock(&message.lock);
 	if (ret1)
-		log_err("add message unlock fail, ret = %d\n", ret1);
+		log_qcy(DEBUG_SERIOUS, "add message unlock fail, ret = %d", ret1);
 	return ret;
 }

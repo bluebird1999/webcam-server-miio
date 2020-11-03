@@ -12,7 +12,6 @@
 #include <pthread.h>
 #include <stdio.h>
 #include <malloc.h>
-#include <dmalloc.h>
 //program header
 #include "../../manager/manager_interface.h"
 #include "../../tools/tools_interface.h"
@@ -45,19 +44,20 @@ static int miio_config_save(void)
 {
 	int ret = 0;
 	message_t msg;
+	char fname[MAX_SYSTEM_STRING_SIZE*2];
 	ret = pthread_rwlock_wrlock(&lock);
 	if(ret)	{
-		log_err("add lock fail, ret = %d\n", ret);
+		log_qcy(DEBUG_SERIOUS, "add lock fail, ret = %d\n", ret);
 		return ret;
 	}
-/*	if( misc_get_bit(dirty, CONFIG_MIIO_IOT) ) {
-		ret = write_config_file(&miio_config_iot_map, CONFIG_MIIO_IOT_PATH);
+	if( misc_get_bit(dirty, CONFIG_MIIO_IOT) ) {
+		memset(fname,0,sizeof(fname));
+		sprintf(fname,"%s%s",_config_.qcy_path, CONFIG_MIIO_IOT_PATH);
+		ret = write_config_file(&miio_config_iot_map, fname);
 		if(!ret)
 			misc_set_bit(&dirty, CONFIG_MIIO_IOT, 0);
 	}
-	else
-*/
-	if( misc_get_bit(dirty, CONFIG_MIIO_DEVICE) )
+	else if( misc_get_bit(dirty, CONFIG_MIIO_DEVICE) )
 	{
 		ret = miio_config_device_write();
 		if(!ret)
@@ -73,7 +73,7 @@ static int miio_config_save(void)
 	}
 	ret = pthread_rwlock_unlock(&lock);
 	if (ret)
-		log_err("add unlock fail, ret = %d\n", ret);
+		log_qcy(DEBUG_SERIOUS, "add unlock fail, ret = %d\n", ret);
 
 	return ret;
 }
@@ -86,9 +86,12 @@ static int miio_config_device_read(int board)
 	char *data = NULL;
 	int fileSize = 0;
 	int ret;
+	char fname[MAX_SYSTEM_STRING_SIZE*2];
     memset(&miio_config.device, 0, sizeof(miio_config_device_t));
 	//read device.conf
-	fp = fopen(CONFIG_MIIO_DEVICE_PATH, "rb");
+	memset(fname,0,sizeof(fname));
+	sprintf(fname,"%s%s",_config_.miio_path, CONFIG_MIIO_DEVICE_PATH);
+	fp = fopen(fname, "rb");
 	if (fp == NULL) {
 		return -1;
 	}
@@ -155,7 +158,9 @@ static int miio_config_device_read(int board)
 	fileSize = 0;
 	len = 0;
 	//read device.token
-	fp = fopen(CONFIG_MIIO_TOKEN_PATH, "rb");
+	memset(fname,0,sizeof(fname));
+	sprintf(fname,"%s%s",_config_.miio_path, CONFIG_MIIO_TOKEN_PATH);
+	fp = fopen(fname, "rb");
 	if (fp == NULL) {
 		return -1;
 	}
@@ -189,13 +194,15 @@ static int miio_config_device_read(int board)
     	free(data);
     }
     else {
-		log_err("device.token -->file date err!!!\n");
+		log_qcy(DEBUG_SERIOUS, "device.token -->file date err!!!\n");
         return -1;
     }
 	fileSize = 0;
 	len = 0;
 	//read os-release
-	fp = fopen(CONFIG_MIIO_OSRELEASE_PATH, "rb");
+	memset(fname,0,sizeof(fname));
+	sprintf(fname,"%s%s",_config_.miio_path, CONFIG_MIIO_OSRELEASE_PATH);
+	fp = fopen(fname, "rb");
 	if (fp == NULL) {
 		return -1;
 	}
@@ -229,7 +236,7 @@ static int miio_config_device_read(int board)
     		memcpy(miio_config.device.version,ptr_version+20,len);
     	}
     	else {
-    		log_err("os-release -->file date err!!!\n");
+    		log_qcy(DEBUG_SERIOUS, "os-release -->file date err!!!\n");
     	}
     	free(data);
     }
@@ -250,13 +257,16 @@ static int miio_config_device_write(void)
 int config_miio_read(miio_config_t *mconfig)
 {
 	int ret,ret1=0;
+	char fname[MAX_SYSTEM_STRING_SIZE*2];
 	pthread_rwlock_init(&lock, NULL);
 	ret = pthread_rwlock_wrlock(&lock);
 	if(ret)	{
-		log_err("add lock fail, ret = %d\n", ret);
+		log_qcy(DEBUG_SERIOUS, "add lock fail, ret = %d\n", ret);
 		return ret;
 	}
-	ret = read_config_file(&miio_config_iot_map, CONFIG_MIIO_IOT_PATH);
+	memset(fname,0,sizeof(fname));
+	sprintf(fname,"%s%s",_config_.qcy_path, CONFIG_MIIO_IOT_PATH);
+	ret = read_config_file(&miio_config_iot_map, fname);
 	if(!ret)
 		misc_set_bit(&miio_config.status, CONFIG_MIIO_IOT,1);
 	else
@@ -270,7 +280,7 @@ int config_miio_read(miio_config_t *mconfig)
 	ret1 |= ret;
 	ret = pthread_rwlock_unlock(&lock);
 	if (ret)
-		log_err("add unlock fail, ret = %d\n", ret);
+		log_qcy(DEBUG_SERIOUS, "add unlock fail, ret = %d\n", ret);
 	ret1 |= ret;
 	memcpy(mconfig,&miio_config,sizeof(miio_config_t));
 	return ret1;
@@ -281,7 +291,7 @@ int config_miio_set(int module, void *arg)
 	int ret = 0;
 	ret = pthread_rwlock_wrlock(&lock);
 	if(ret)	{
-		log_err("add lock fail, ret = %d\n", ret);
+		log_qcy(DEBUG_SERIOUS, "add lock fail, ret = %d\n", ret);
 		return ret;
 	}
 	if(dirty==0) {
@@ -307,7 +317,7 @@ int config_miio_set(int module, void *arg)
 	}
 	ret = pthread_rwlock_unlock(&lock);
 	if (ret)
-		log_err("add unlock fail, ret = %d\n", ret);
+		log_qcy(DEBUG_SERIOUS, "add unlock fail, ret = %d\n", ret);
 	return ret;
 }
 
@@ -316,7 +326,7 @@ int config_miio_get_config_status(int module)
 	int st,ret=0;
 	ret = pthread_rwlock_wrlock(&lock);
 	if(ret)	{
-		log_err("add lock fail, ret = %d\n", ret);
+		log_qcy(DEBUG_SERIOUS, "add lock fail, ret = %d\n", ret);
 		return ret;
 	}
 	if(module==-1)
@@ -325,6 +335,6 @@ int config_miio_get_config_status(int module)
 		st = misc_get_bit(miio_config.status, module);
 	ret = pthread_rwlock_unlock(&lock);
 	if (ret)
-		log_err("add unlock fail, ret = %d\n", ret);
+		log_qcy(DEBUG_SERIOUS, "add unlock fail, ret = %d\n", ret);
 	return st;
 }
