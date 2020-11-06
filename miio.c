@@ -172,9 +172,9 @@ static int miio_routine_1000ms(void)
 	if( config.iot.board_type && !miio_info.did_acquired )
 		miio_query_device_did();
 	if( miio_info.miio_status == STATE_CLOUD_CONNECTED
-		&& miio_info.time_sync ) {
-		if( config.iot.board_type && !miio_info.did_acquired)
-			return ret;
+		&& miio_info.time_sync && miio_info.did_acquired ) {
+//		if( config.iot.board_type && !miio_info.did_acquired)
+//			return ret;
 		/********message body********/
 		msg_init(&msg);
 		msg.message = MSG_MANAGER_TIMER_REMOVE;
@@ -1273,17 +1273,20 @@ next_level:
             log_qcy(DEBUG_WARNING, "http_jason_get_device_did error");
        }
        else{
-    	   miio_info.did_acquired = 1;
-    	   	/********message body********/
-			msg_init(&message);
-			message.message = MSG_MIIO_PROPERTY_NOTIFY;
-			message.sender = message.receiver = SERVER_MIIO;
-			message.arg_in.cat = MIIO_PROPERTY_DID_STATUS;
-			message.arg_in.dog = miio_info.did_acquired;
-			message.arg = config.device.did;
-			message.arg_size = strlen(config.device.did) + 1;
-			server_miss_message(&message);
-			/********message body********/
+    	   if(strlen(config.device.did) > 1)
+    	   {
+    		   miio_info.did_acquired = 1;
+			   /********message body********/
+				msg_init(&message);
+				message.message = MSG_MIIO_PROPERTY_NOTIFY;
+				message.sender = message.receiver = SERVER_MIIO;
+				message.arg_in.cat = MIIO_PROPERTY_DID_STATUS;
+				message.arg_in.dog = miio_info.did_acquired;
+				message.arg = config.device.did;
+				message.arg_size = strlen(config.device.did) + 1;
+				server_miss_message(&message);
+				/********message body********/
+    	   }
        }
        return 0;
     }
@@ -1814,7 +1817,7 @@ static int server_message_proc(void)
 			/***************************/
 			break;
 		default:
-			log_qcy(DEBUG_SERIOUS, "not processed message = %d", msg.message);
+			log_qcy(DEBUG_SERIOUS, "not processed message = %x", msg.message);
 			break;
 	}
 	msg_free(&msg);
