@@ -41,6 +41,8 @@
 #include "../../server/recorder/recorder_interface.h"
 #include "../../server/device/device_interface.h"
 #include "../../server/video2/video2_interface.h"
+#include "../../server/scanner/scanner_interface.h"
+#include "../../server/player/player_interface.h"
 //server header
 #include "mi.h"
 #include "miio.h"
@@ -183,6 +185,25 @@ static int miio_routine_1000ms(void)
 		manager_message(&msg);
 		/****************************/
 	}
+	/*	static sent = 0;
+	if( !sent) {
+		char temp[256] = "{ \"id\": 12345 ,\"method\": \"local.ble.config_router\", \"params\": { \"bind_key\": \"xx\", \"ssid\": \"WiFi-BE11\", \"passwd\": \"New1234321\", \"tz\":\"Asia\/Shanghai\", \"country_domain\":\"cn\" } }";
+		msg_init(&msg);
+		msg.message = MSG_SCANNER_QR_CODE_BEGIN_ACK;
+		msg.receiver = msg.sender = SERVER_MIIO;
+		msg.result = 0;
+		msg.arg = temp;
+		msg.arg_size = strlen(temp) + 1;
+		server_miio_message(&msg);
+    	sent = 1;
+        message_t msg;
+    	msg_init(&msg);
+    	msg.message = MSG_PLAYER_GET_FILE_LIST;
+    	msg.sender = msg.receiver = SERVER_MISS;
+     	msg.arg_pass.handler = session;
+    	server_player_message(&msg);
+	}
+*/
 	return ret;
 }
 
@@ -1002,6 +1023,7 @@ static int miio_action_func(int id,char *did,int siid,int aiid,cJSON *json_in)
 	int ret = -1;
     int num = id;
     message_t msg;
+    msg_init(&msg);
 	/********message body********/
 	msg.sender = msg.receiver = SERVER_MIIO;
 	msg.arg_pass.cat = id;
@@ -1206,42 +1228,77 @@ static int miio_message_dispatcher(const char *msg, int len)
 	message_t message;
     char ackbuf[MIIO_MAX_PAYLOAD];
     int old_status = miio_info.miio_status;
-    if( miio_info.miio_status == STATE_CLOUD_CONNECTED)
-    	goto next_level;
-	if ((json_verify_method_value(msg, "method", "local.status", json_type_string) == 0) \
-        &&(json_verify_method_value(msg, "params", "wifi_ap_mode", json_type_string) == 0)) {
-		miio_info.miio_status = STATE_WIFI_AP_MODE;
+	if( json_verify_method_value(msg, "method", "local.bind", json_type_string) == 0) {
+		if( (json_verify_method_value(msg, "result", "ok", json_type_string) == 0) &&
+				miio_info.miio_status == STATE_WIFI_AP_MODE ) {
+			miio_info.miio_status = STATE_WIFI_STA_MODE;
+			/***************************************/
+			msg_init(&message);
+			message.message = MSG_MIIO_PROPERTY_NOTIFY;
+			message.sender = message.receiver = SERVER_MIIO;
+			message.arg_in.cat = MIIO_PROPERTY_CLIENT_STATUS;
+			message.arg_in.dog = miio_info.miio_status;
+			manager_message(&message);
+			/***************************************/
+		}
+		return 0;
 	}
-    if( miio_info.miio_status == STATE_WIFI_AP_MODE ) {
-    	if (json_verify_method_value(msg, "method", "local.bind", json_type_string) == 0) {
-        	if (json_verify_method_value(msg, "result", "ok", json_type_string) == 0) {
-        		miio_info.miio_status = STATE_WIFI_STA_MODE;
-        	}
-    	}
-        return 0;
-    }
 	if ((json_verify_method_value(msg, "method", "local.status", json_type_string) == 0)) {
-		if(json_verify_method_value(msg, "params", "internet_connected", json_type_string) == 0) {
+		if( json_verify_method_value(msg, "params", "wifi_ap_mode", json_type_string) == 0) {
+			if ( (miio_info.miio_status != STATE_WIFI_AP_MODE ) ) {
+				miio_info.miio_status = STATE_WIFI_AP_MODE;
+				/***************************************/
+				msg_init(&message);
+				message.message = MSG_SCANNER_QR_CODE_BEGIN;
+				message.sender = message.receiver = SERVER_MIIO;
+				server_scanner_message(&message);
+				/***************************************/
+			}
+		}
+		else if( json_verify_method_value(msg, "params", "wifi_connected", json_type_string) == 0) {
+			if ( (miio_info.miio_status != STATE_WIFI_STA_MODE ) ) {
+				miio_info.miio_status = STATE_WIFI_STA_MODE;
+				if( old_status == STATE_WIFI_AP_MODE) {
+					/***************************************/
+					msg_init(&message);
+					message.message = MSG_MIIO_PROPERTY_NOTIFY;
+					message.sender = message.receiver = SERVER_MIIO;
+					message.arg_in.cat = MIIO_PROPERTY_CLIENT_STATUS;
+					message.arg_in.dog = miio_info.miio_status;
+					manager_message(&message);
+					/***************************************/
+				}
+			}
+		}
+		else if(json_verify_method_value(msg, "params", "internet_connected", json_type_string) == 0) {
 			miio_info.miio_status = STATE_CLOUD_CONNECTED;
 		}
 		else if(json_verify_method_value(msg, "params", "cloud_connected", json_type_string) == 0) {
 			miio_info.miio_status = STATE_CLOUD_CONNECTED;
+			if( old_status == STATE_WIFI_AP_MODE) {
+				/***************************************/
+				msg_init(&message);
+				message.message = MSG_MIIO_PROPERTY_NOTIFY;
+				message.sender = message.receiver = SERVER_MIIO;
+				message.arg_in.cat = MIIO_PROPERTY_CLIENT_STATUS;
+				message.arg_in.dog = miio_info.miio_status;
+				manager_message(&message);
+				/***************************************/
+			}
 		}
-		else {
-			return 0;
+		if( old_status != miio_info.miio_status ) {
+			/********message body********/
+			msg_init(&message);
+			message.sender = message.receiver = SERVER_MIIO;
+			message.message = MSG_MIIO_PROPERTY_NOTIFY;
+			message.arg_in.cat = MIIO_PROPERTY_CLIENT_STATUS;
+			message.arg_in.dog = miio_info.miio_status;
+			server_miss_message(&message);
+			/****************************/
 		}
+		return 0;
 	}
 next_level:
-	if( old_status != miio_info.miio_status ) {
-		/********message body********/
-		msg_init(&message);
-		message.sender = message.receiver = SERVER_MIIO;
-		message.message = MSG_MIIO_PROPERTY_NOTIFY;
-		message.arg_in.cat = MIIO_PROPERTY_CLIENT_STATUS;
-		message.arg_in.dog = miio_info.miio_status;
-		server_miss_message(&message);
-		/****************************/
-	}
     ret = json_verify_get_int(msg, "id", &id);
     if (ret < 0) {
     	return ret;
@@ -1298,7 +1355,6 @@ next_level:
 	message.arg = msg;
 	message.arg_size = len + 1;
 	ret = server_miss_message(&message);
-	log_qcy(DEBUG_INFO, "this miss rpc message = %s, len = %d", msg, len);
 	/********message body********/
 	//result
 	if (json_verify_method(msg, "result") == 0) {
@@ -1815,6 +1871,11 @@ static int server_message_proc(void)
 			send_msg.result = 0;
 			ret = send_message(msg.receiver, &send_msg);
 			/***************************/
+			break;
+		case MSG_SCANNER_QR_CODE_BEGIN_ACK:
+			if( !msg.result ) {
+				ret = miio_socket_send((char*)msg.arg, msg.arg_size-1);
+			}
 			break;
 		default:
 			log_qcy(DEBUG_SERIOUS, "not processed message = %x", msg.message);
