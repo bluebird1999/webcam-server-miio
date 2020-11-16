@@ -12,6 +12,7 @@
  * header
  */
 #include "../../manager/global_interface.h"
+
 /*
  * define
  */
@@ -32,10 +33,11 @@ typedef struct ota_config_t {
 /*
  * function
  */
-int ota_get_state_ack(int id, int type, int status, int progress);
+int ota_get_state_ack(int did, int type, int status, int progress);
 int ota_init(const char *msg);
 int ota_get_state(const char *msg);
 int ota_get_progress(const char *msg);
-int ota_proc(int status, int progress, int msg_id);
+int ota_proc(int status, int progress, int err_id);
+int ota_down_ack(int id, int result);
 
 #endif /* SERVER_MIIO_OTA_H_ */

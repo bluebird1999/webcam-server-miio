@@ -15,6 +15,7 @@
 //program header
 #include "../../manager/manager_interface.h"
 #include "../../tools/tools_interface.h"
+#include "../../server/kernel/kernel_interface.h"
 //server header
 #include "config.h"
 
@@ -230,10 +231,10 @@ static int miio_config_device_read(int board)
     		return -1;
     	}
     	fclose(fp);
-    	ptr_version = strstr(data, "REALTEK_RTK_VERSION=");
-    	len = fileSize-20;
+    	ptr_version = strstr(data, "QCY_VERSION=");
+    	len = fileSize-12;
     	if(ptr_version&&(len > 0)) {
-    		memcpy(miio_config.device.version,ptr_version+20,len);
+    		memcpy(miio_config.device.version,ptr_version+12,len);
     	}
     	else {
     		log_qcy(DEBUG_SERIOUS, "os-release -->file date err!!!\n");

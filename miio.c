@@ -43,6 +43,7 @@
 #include "../../server/video2/video2_interface.h"
 #include "../../server/scanner/scanner_interface.h"
 #include "../../server/player/player_interface.h"
+#include "../../server/kernel/kernel_interface.h"
 //server header
 #include "mi.h"
 #include "miio.h"
@@ -118,7 +119,7 @@ static int send_message(int receiver, message_t *msg)
 			st = server_device_message(msg);
 			break;
 		case SERVER_KERNEL:
-	//		st = server_kernel_message(msg);
+			st = server_kernel_message(msg);
 			break;
 		case SERVER_REALTEK:
 			st = server_realtek_message(msg);
@@ -151,7 +152,7 @@ static int send_message(int receiver, message_t *msg)
 			st = server_video2_message(msg);
 			break;
 		case SERVER_SCANNER:
-//			st = server_scanner_message(msg);
+			st = server_scanner_message(msg);
 			break;
 		case SERVER_MANAGER:
 			st = manager_message(msg);
@@ -198,9 +199,12 @@ static int miio_routine_1000ms(void)
     	sent = 1;
         message_t msg;
     	msg_init(&msg);
-    	msg.message = MSG_PLAYER_GET_FILE_LIST;
+    	msg.message = MSG_PLAYER_GET_FILE_DATE;
     	msg.sender = msg.receiver = SERVER_MISS;
-     	msg.arg_pass.handler = session;
+    	msg.arg_pass.cat = GET_RECORD_DATE;
+    	msg.arg_in.cat = 1605398400;
+    	msg.arg_in.dog = 1605409200;
+//     	msg.arg_pass.handler = session;
     	server_player_message(&msg);
 	}
 */
@@ -1012,6 +1016,16 @@ static int miio_action_func_ack(message_arg_t arg_pass, int result, int size, vo
 			}
 			miio_socket_send(ackbuf, strlen(ackbuf));
 			break;
+		case KERNEL_SET_TZ:
+				if(!result) {
+					sprintf(ackbuf, "{\"id\":%d,\"result\":[\"OK\"]}", arg_pass.cat);
+				}
+				else {
+					sprintf(ackbuf, "{\"id\":%d,\"result\":[\"ERROR\"]}", arg_pass.cat);
+				}
+			miio_socket_send(ackbuf, strlen(ackbuf));
+			break;
+
 		default:
 			break;
     }
@@ -1048,14 +1062,17 @@ static int miio_action_func(int id,char *did,int siid,int aiid,cJSON *json_in)
 			}
 
 			break;
-/*		case IID_6_MoreSet:
+		case IID_6_MoreSet:
 			if(aiid == IID_6_1_Reboot) {
 				log_qcy(DEBUG_SERIOUS, "IID_6_1_Reboot");
-				send_complicate_request(&msg, MSG_KERNEL_ACTION, SERVER_KERNEL, id, aiid, siid,
-						KERNEL_ACTION_REBOOT, 0, 0);
+				msg.message = MSG_KERNEL_ACTION;
+				msg.arg_in.cat = KERNEL_ACTION_REBOOT;
+				send_message(SERVER_KERNEL, &msg);
+				/*send_complicate_request(&msg, MSG_KERNEL_ACTION, SERVER_KERNEL, id, aiid, siid,
+						KERNEL_ACTION_REBOOT, 0, 0);*/
 			}
 			break;
-*/
+
 		default:
 			break;
       }
@@ -1118,18 +1135,43 @@ static int miio_set_timezone(const char *msg)
             msg_init(&message);
             message.sender = message.receiver = SERVER_MIIO;
             message.arg_pass.cat = id;
-            message.arg_pass.handler = NULL;
-//			message.message = MSG_KERNEL_PROPERTY_SET;
-//			message.arg_in.cat = KERNEL_PROPERTY_TIMEZONE;
+            message.arg_pass.handler = miio_action_func_ack;
+			message.arg_pass.chick = KERNEL_SET_TZ;
+			message.message = MSG_KERNEL_CTRL_TIMEZONE;
+			message.arg_in.cat = KERNEL_SET_TZ;
             message.arg = (void*)object->valuestring;
             message.arg_size = strlen(object->valuestring) + 1;
- //       	send_message(SERVER_KERNEL, &message);
+        	send_message(SERVER_KERNEL, &message);
         }
     }
     cJSON_Delete(json);
     return ret;
 }
 
+static int iot_miio_restore(const char *msg)
+{
+	cJSON *json,*arrayItem,*object,*item;
+    int i=0, ret = 0, id;
+    message_t message;
+	log_qcy(DEBUG_INFO, "method:miIO.restore");
+	//get id
+	ret = json_verify_get_int(msg, "id", &id);
+	if (ret < 0) {
+		return ret;
+	}
+        	/********message body********/
+            msg_init(&message);
+            message.sender = message.receiver = SERVER_MIIO;
+            message.arg_pass.cat = id;
+            message.arg_pass.handler = miio_action_func_ack;
+			message.message = MSG_KERNEL_ACTION;
+			message.arg_in.cat = KERNEL_ACTION_RESTORE;
+			message.arg_pass.chick = KERNEL_ACTION_RESTORE;
+        	send_message(SERVER_KERNEL, &message);
+
+    return ret;
+
+}
 static int miio_result_parse(const char *msg,int id)
 {
     log_qcy(DEBUG_INFO, "msg: %s, strlen: %d",msg, (int)strlen(msg));
@@ -1294,6 +1336,7 @@ static int miio_message_dispatcher(const char *msg, int len)
 			message.arg_in.cat = MIIO_PROPERTY_CLIENT_STATUS;
 			message.arg_in.dog = miio_info.miio_status;
 			server_miss_message(&message);
+			server_kernel_message(&message);
 			/****************************/
 		}
 		return 0;
@@ -1320,6 +1363,7 @@ next_level:
 			server_recorder_message(&message);
 			server_video_message(&message);
 			server_video2_message(&message);
+			server_kernel_message(&message);
 			/****************************/
        }
        return 0;
@@ -1375,6 +1419,7 @@ next_level:
     	ret = miio_set_timezone(msg);
 	}
 	else if (json_verify_method_value(msg, "method", "miIO.ota", json_type_string) == 0) {
+
 		ret = ota_init(msg);
 	}
     else if (json_verify_method_value(msg, "method", "miIO.get_ota_state", json_type_string) == 0) {
@@ -1391,7 +1436,6 @@ next_level:
 	}
 	else if (json_verify_method_value(msg, "method", "miss.set_vendor", json_type_string) == 0) {
 		log_qcy(DEBUG_INFO, "miss.set_vendor: %s", msg);
-//		ret = miss_rpc_process(NULL, msg, len);
 		/********message body********/
 		msg_init(&message);
 		message.message = MSG_MISS_RPC_SEND;
@@ -1406,7 +1450,7 @@ next_level:
 //		ret = iot_miio_reboot(id);
     }
 	else if (json_verify_method_value(msg, "method", "miIO.restore", json_type_string) == 0) {
-//		ret = iot_miio_restore(id);
+		ret = iot_miio_restore(msg);
     }
     else {
         log_qcy(DEBUG_INFO, "msg:%s ,strlen: %d, len: %d",msg, (int)strlen(msg), len);
@@ -1843,14 +1887,21 @@ static int server_message_proc(void)
 				( *( int(*)(message_arg_t,int,int,void*) ) msg.arg_pass.handler ) (msg.arg_pass, msg.result, msg.arg_size, msg.arg);
 			break;
 		case MSG_DEVICE_ACTION_ACK:
+		case MSG_KERNEL_CTRL_TIMEZONE_ACK:
+		case MSG_KERNEL_ACTION_ACK:
 			miio_action_func_ack(msg.arg_pass, msg.result, msg.arg_size, msg.arg);
 			break;
-	//	case MSG_KERNEL_OTA_REPORT:
-	//		ota_proc(msg.arg_in.cat, msg.arg_in.dog, msg.arg_in.duck);
-	//		break;
-	//	case MSG_KERNEL_OTA_REQUEST_ACK:
-	//		ota_get_state_ack(msg.arg_in.duck, msg.arg_pass.cat, msg.arg_in.cat, msg.arg_in.dog);
-	//		break;
+		case MSG_KERNEL_OTA_REPORT_ACK:
+			ota_proc(msg.arg_in.cat, msg.arg_in.dog,msg.arg_in.duck);
+			break;
+		case MSG_KERNEL_OTA_REQUEST_ACK:
+			//log_info("into MSG_KERNEL_OTA_REQUEST_ACK\n");
+			ota_get_state_ack(msg.arg_pass.cat, msg.arg_pass.chick, msg.arg_in.cat, msg.arg_in.dog);
+			break;
+		case MSG_KERNEL_OTA_DOWNLOAD_ACK:
+			//log_info("into MSG_KERNEL_OTA_DOWNLOAD_ACK\n");
+			ota_down_ack(msg.arg_pass.cat, msg.result);
+			break;
 		case MSG_MIIO_PROPERTY_GET:
 		    /********message body********/
 			msg_init(&send_msg);
