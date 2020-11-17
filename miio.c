@@ -186,7 +186,8 @@ static int miio_routine_1000ms(void)
 		manager_message(&msg);
 		/****************************/
 	}
-	/*	static sent = 0;
+	/*
+	static sent = 0;
 	if( !sent) {
 		char temp[256] = "{ \"id\": 12345 ,\"method\": \"local.ble.config_router\", \"params\": { \"bind_key\": \"xx\", \"ssid\": \"WiFi-BE11\", \"passwd\": \"New1234321\", \"tz\":\"Asia\/Shanghai\", \"country_domain\":\"cn\" } }";
 		msg_init(&msg);
@@ -206,6 +207,17 @@ static int miio_routine_1000ms(void)
     	msg.arg_in.dog = 1605409200;
 //     	msg.arg_pass.handler = session;
     	server_player_message(&msg);
+
+        message_t msg;
+        int msgg = 0;
+    	msg_init(&msg);
+    	msg.message = MSG_MANAGER_PROPERTY_SET;
+    	msg.sender = msg.receiver = SERVER_MIIO;
+    	msg.arg_pass.cat = MANAGER_PROPERTY_SLEEP;
+    	msg.arg_in.cat = MANAGER_PROPERTY_SLEEP;
+    	msg.arg = &msgg;
+    	msg.arg_size = sizeof(msgg);
+    	manager_message(&msg);
 	}
 */
 	return ret;
@@ -496,9 +508,15 @@ static int miio_get_properties_vlaue(int id,char *did,int piid,int siid,cJSON *j
 		}
 		case IID_2_CameraControl:
 			msg.message = MSG_VIDEO_PROPERTY_GET;
-			if( piid == IID_2_1_On ) {
+/*			if( piid == IID_2_1_On ) {
 				msg.arg_in.cat = VIDEO_PROPERTY_SWITCH;
 				send_message(SERVER_VIDEO, &msg);
+			}
+*/
+			if( piid == IID_2_1_On ) {
+				msg.message = MSG_MANAGER_PROPERTY_GET;
+				msg.arg_in.cat = MANAGER_PROPERTY_SLEEP;
+				send_message(SERVER_MANAGER, &msg);
 			}
 			else if( piid == IID_2_2_ImageRollover) {
 				msg.arg_in.cat = VIDEO_PROPERTY_IMAGE_ROLLOVER;
@@ -717,6 +735,7 @@ static int miio_set_properties_vlaue(int id, char *did, int piid, int siid, cJSO
 		case IID_2_CameraControl:
 			if(piid == IID_2_1_On) {
 				log_qcy(DEBUG_INFO, "IID_2_1_On:%d ",value_json->valueint);
+				/*
 				if( value_json->valueint == 1) {
 					msg.message = MSG_VIDEO_START;
 					msg.arg_in.cat = VIDEO_PROPERTY_SWITCH;
@@ -727,6 +746,12 @@ static int miio_set_properties_vlaue(int id, char *did, int piid, int siid, cJSO
 					msg.arg_in.cat = VIDEO_PROPERTY_SWITCH;
 					send_message(SERVER_VIDEO, &msg);
 				}
+				*/
+				msg.message = MSG_MANAGER_PROPERTY_SET;
+				msg.arg_in.cat = MANAGER_PROPERTY_SLEEP;
+				msg.arg = &(value_json->valueint);
+				msg.arg_size = sizeof( value_json->valueint );
+				send_message(SERVER_MANAGER, &msg);
 				return -1;
 			}
 			else if(piid == IID_2_2_ImageRollover) {
@@ -1874,6 +1899,7 @@ static int server_message_proc(void)
 		case MSG_VIDEO_PROPERTY_GET_ACK:
 		case MSG_DEVICE_GET_PARA_ACK:
 		case MSG_RECORDER_PROPERTY_GET_ACK:
+		case MSG_MANAGER_PROPERTY_GET_ACK:
 			if( msg.arg_pass.handler != NULL)
 				( *( int(*)(message_arg_t,int,int,void*) ) msg.arg_pass.handler ) (msg.arg_pass, msg.result, msg.arg_size, msg.arg);
 			break;
@@ -1883,6 +1909,7 @@ static int server_message_proc(void)
 		case MSG_VIDEO_START_ACK:
 		case MSG_VIDEO_STOP_ACK:
 		case MSG_RECORDER_PROPERTY_SET_ACK:
+		case MSG_MANAGER_PROPERTY_SET_ACK:
 			if( msg.arg_pass.handler != NULL)
 				( *( int(*)(message_arg_t,int,int,void*) ) msg.arg_pass.handler ) (msg.arg_pass, msg.result, msg.arg_size, msg.arg);
 			break;
@@ -2074,6 +2101,7 @@ static void *server_func(void)
 	}
 	if( info.exit ) {
 		while( info.thread_start ) {
+			log_qcy(DEBUG_INFO, "---------------locked mioo---- %d", info.thread_start);
 		}
 	    /********message body********/
 		message_t msg;
