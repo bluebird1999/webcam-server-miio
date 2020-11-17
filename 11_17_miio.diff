@@ -1,0 +1,78 @@
+diff --git a/ota.c b/ota.c
+index c550da2..120ff2b 100644
+--- a/ota.c
++++ b/ota.c
+@@ -187,7 +187,7 @@ int ota_get_progress(const char *msg)
+ 	message.arg_in.cat = OTA_INFO_PROGRESS;
+ 	message.arg_pass.chick = OTA_INFO_PROGRESS;
+ 	server_kernel_message(&message);
+-	log_qcy(DEBUG_INFO,"------send msg  ota_get_progress end-----\n");
++	//log_qcy(DEBUG_INFO,"------send msg  ota_get_progress end-----\n");
+ 	/***************************/
+     return ret;
+ }
+@@ -199,43 +199,51 @@ int ota_proc(int status, int progress, int err_id)
+     	if( status == OTA_STATE_IDLE ) {
+ 			config.status = OTA_STATE_IDLE;
+ 			ret=ota_push_state(config.status, err_id);
++			if(err_id != OTA_ERR_NONE)
+ 			ret=ota_push_progress(progress);
+ 		}
+ 
+ 		if( status == OTA_STATE_DOWNLOADING ) {
+ 			config.status = OTA_STATE_DOWNLOADING;
+ 			ret=ota_push_state(config.status, err_id);
++			if(err_id != OTA_ERR_NONE)
+ 			ret=ota_push_progress(progress);
+ 		}
+ 
+ 		if( status == OTA_STATE_DOWNLOADED ) {
+ 			config.status = OTA_STATE_DOWNLOADED;
+ 			ret=ota_push_state(config.status, err_id);
++			if(err_id != OTA_ERR_NONE)
+ 			ret=ota_push_progress(progress);
+ 		}
+ 		else if( status == OTA_STATE_INSTALLING ) {
+ 			config.status = OTA_STATE_INSTALLING;
+ 			ret=ota_push_state(config.status, err_id);
++			if(err_id != OTA_ERR_NONE)
+ 			ret=ota_push_progress(progress);
+ 		}
+ 		else if (status == OTA_STATE_WAIT_INSTALL) {
+ 			config.status = OTA_STATE_WAIT_INSTALL;
+ 			ret=ota_push_state(config.status, err_id);
++			if(err_id != OTA_ERR_NONE)
+ 			ret=ota_push_progress(progress);
+ 		}
+ 		else if (status == OTA_STATE_INSTALLED) {
+ 			config.status = OTA_STATE_INSTALLED;
+ 			ret=ota_push_state(config.status, err_id);
++			if(err_id != OTA_ERR_NONE)
+ 			ret=ota_push_progress(progress);
+ 		}
+ 		else if (status == OTA_STATE_FAILED) {
+ 			config.status = OTA_STATE_FAILED;
+ 			ret=ota_push_state(config.status, err_id);
++			if(err_id != OTA_ERR_NONE)
+ 			ret=ota_push_progress(progress);
+ 		}
+ 		else if (status == OTA_STATE_BUSY) {
+ 			config.status = OTA_STATE_BUSY;
+ 			ret=ota_push_state(config.status, err_id);
++			if(err_id != OTA_ERR_NONE)
+ 			ret=ota_push_progress(progress);
+ 		}
+ 
+diff --git a/ota.h b/ota.h
+index e8f1513..060041a 100644
+--- a/ota.h
++++ b/ota.h
+@@ -16,8 +16,6 @@
+ /*
+  * define
+  */
+-#define	OTA_INFO_STATUS 	0x00
+-#define	OTA_INFO_PROGRESS 	0x01
+ /*
+  * structure
+  */

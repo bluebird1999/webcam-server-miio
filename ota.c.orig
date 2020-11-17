@@ -187,7 +187,7 @@ int ota_get_progress(const char *msg)
 	message.arg_in.cat = OTA_INFO_PROGRESS;
 	message.arg_pass.chick = OTA_INFO_PROGRESS;
 	server_kernel_message(&message);
-//	log_qcy(DEBUG_INFO,"------send msg  ota_get_progress end-----\n");
+	//log_qcy(DEBUG_INFO,"------send msg  ota_get_progress end-----\n");
 	/***************************/
     return ret;
 }
