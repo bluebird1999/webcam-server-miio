@@ -731,6 +731,7 @@ static int miio_set_properties_vlaue(int id, char *did, int piid, int siid, cJSO
 	msg.arg_pass.chick = siid;
 	msg.arg_pass.handler = miio_set_properties_callback;
 	/****************************/
+	static long long int st=0;
     switch(siid){
 		case IID_2_CameraControl:
 			if(piid == IID_2_1_On) {
@@ -747,11 +748,17 @@ static int miio_set_properties_vlaue(int id, char *did, int piid, int siid, cJSO
 					send_message(SERVER_VIDEO, &msg);
 				}
 				*/
-				msg.message = MSG_MANAGER_PROPERTY_SET;
-				msg.arg_in.cat = MANAGER_PROPERTY_SLEEP;
-				msg.arg = &(value_json->valueint);
-				msg.arg_size = sizeof( value_json->valueint );
-				send_message(SERVER_MANAGER, &msg);
+				if( (time_get_now_stamp() - st) > 2 ){
+					msg.message = MSG_MANAGER_PROPERTY_SET;
+					msg.arg_in.cat = MANAGER_PROPERTY_SLEEP;
+					msg.arg = &(value_json->valueint);
+					msg.arg_size = sizeof( value_json->valueint );
+					send_message(SERVER_MANAGER, &msg);
+					st = time_get_now_stamp();
+				}
+				else {
+					log_qcy(DEBUG_INFO, "CameraControl On-Off too fast, ignored!");
+				}
 				return -1;
 			}
 			else if(piid == IID_2_2_ImageRollover) {
