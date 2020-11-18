@@ -175,9 +175,9 @@ static int miio_routine_1000ms(void)
 	if( config.iot.board_type && !miio_info.did_acquired )
 		miio_query_device_did();
 	if( miio_info.miio_status == STATE_CLOUD_CONNECTED
-		&& miio_info.time_sync && miio_info.did_acquired ) {
-//		if( config.iot.board_type && !miio_info.did_acquired)
-//			return ret;
+		&& miio_info.time_sync) {
+		if( config.iot.board_type && !miio_info.did_acquired)
+			return ret;
 		/********message body********/
 		msg_init(&msg);
 		msg.message = MSG_MANAGER_TIMER_REMOVE;
@@ -1770,7 +1770,7 @@ static void server_thread_termination(void)
 	manager_message(&msg);
 }
 
-static int server_release(void)
+static int server_release_1(void)
 {
 	int ret = 0;
 	message_t msg;
@@ -1782,6 +1782,12 @@ static int server_release(void)
 	msg.arg_in.handler = miio_routine_1000ms;
 	manager_message(&msg);
 	/****************************/
+	return ret;
+}
+
+static int server_release_2(void)
+{
+	int ret = 0;
 	msg_buffer_release(&message);
 	msg_free(&info.task.msg);
 	memset(&info,0,sizeof(server_info_t));
@@ -2099,10 +2105,12 @@ static void *server_func(void)
 		if( info.status!=STATUS_ERROR )
 			heart_beat_proc();
 	}
+	server_release_1();
 	if( info.exit ) {
 		while( info.thread_start ) {
-			log_qcy(DEBUG_INFO, "---------------locked mioo---- %d", info.thread_start);
+			log_qcy(DEBUG_INFO, "---------------locked miio---- %d", info.thread_start);
 		}
+		server_release_2();
 	    /********message body********/
 		message_t msg;
 		msg_init(&msg);
@@ -2111,7 +2119,6 @@ static void *server_func(void)
 		manager_message(&msg);
 		/***************************/
 	}
-	server_release();
 	log_qcy(DEBUG_INFO, "-----------thread exit: server_miio-----------");
 	pthread_exit(0);
 }

@@ -16,7 +16,7 @@
 /*
  * define
  */
-#define		SERVER_MIIO_VERSION_STRING			"alpha-3.12"
+#define		SERVER_MIIO_VERSION_STRING			"alpha-3.13"
 
 #define		MSG_MIIO_BASE						(SERVER_MIIO<<16)
 #define		MSG_MIIO_SIGINT						(MSG_MIIO_BASE | 0x0000)
