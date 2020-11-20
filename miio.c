@@ -1795,9 +1795,11 @@ static int server_release_1(void)
 static int server_release_2(void)
 {
 	int ret = 0;
+	int retain_exit = info.exit;
 	msg_buffer_release(&message);
 	msg_free(&info.task.msg);
 	memset(&info,0,sizeof(server_info_t));
+	info.exit = retain_exit;
 	memset(&config,0,sizeof(miio_config_t));
 	memset(&miio_info,0,sizeof(miio_info_t));
 	memset(&msg_helper,0,sizeof(msg_helper_t));
@@ -2145,6 +2147,7 @@ int miio_send_to_cloud(char *buf, int size)
 int server_miio_start(void)
 {
 	int ret=-1;
+	info.exit = 0;	//!!!important for retain exiting.
 	ret = pthread_create(&info.id, NULL, server_func, NULL);
 	if(ret != 0) {
 		log_qcy(DEBUG_SERIOUS, "miio server create error! ret = %d",ret);
