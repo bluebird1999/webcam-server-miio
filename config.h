@@ -53,6 +53,5 @@ typedef struct miio_config_t {
  */
 int config_miio_read(miio_config_t *);
 int config_miio_set(int module, void *arg);
-int config_miio_get_config_status(int module);
 
 #endif /* SERVER_MIIO_CONFIG_H_ */

@@ -164,7 +164,7 @@ int ota_get_state(const char *msg)
     message.arg_pass.cat = id;
 	message.arg_in.cat = OTA_INFO_STATUS;
 	message.arg_pass.chick = OTA_INFO_STATUS;
-	server_kernel_message(&message);
+	manager_common_send_message(SERVER_KERNEL,  &message);
 	/***************************/
 	//log_qcy(DEBUG_INFO,"------send msg  ota_get_state end-----\n");
     return ret;
@@ -186,7 +186,7 @@ int ota_get_progress(const char *msg)
     message.arg_pass.cat = id;
 	message.arg_in.cat = OTA_INFO_PROGRESS;
 	message.arg_pass.chick = OTA_INFO_PROGRESS;
-	server_kernel_message(&message);
+	manager_common_send_message(SERVER_KERNEL,  &message);
 //	log_qcy(DEBUG_INFO,"------send msg  ota_get_progress end-----\n");
 	/***************************/
     return ret;
@@ -330,7 +330,7 @@ int ota_init(const char *msg)
 	message.arg_size = strlen(config.url);
 	message.extra = config.md5;
 	message.extra_size = strlen(config.md5);
-	server_kernel_message(&message);
+	manager_common_send_message(SERVER_KERNEL,  &message);
 
 	/***************************/
     cJSON_Delete(json);

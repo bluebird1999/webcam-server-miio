@@ -40,14 +40,14 @@
 #define OT_GET_P2P_ID_TEMPLATE 		"{\"id\":%d,\"method\":\"_sync.get_p2p_id\",\"params\":{}}"
 #define	OT_REG_OK_TEMPLATE			"{\"id\": %d,\"result\" : {\"code\" : 0,\"out\" : []}}"
 #define OT_REG_ERR_TEMPLATE			"{\"id\": %d,\"result\" : {\"code\" : -4004}}"
-#define OT_REG_INT_TEMPLATE			"{\"id\": %d,\"method\": \"properties_changed\",\"params\":\
-									[{\"did\" : \"%s\",\"siid\" : %d,\"piid\" : %d,\"value\" : %d}]}"
-#define OT_REG_STR_TEMPLATE			"{\"id\": %d,\"method\": \"properties_changed\",\"params\":\
-									[{\"did\" : \"%s\",\"siid\" : %d,\"piid\" : %d,\"value\" : \"%s\"}]}"
+#define OT_REG_BOOL_TEMPLATE		"{\"id\": %d,\"method\": \"properties_changed\",\"params\":[{\"did\" : \"%s\",\"siid\" : %d,\"piid\" : %d,\"value\" : %s}]}"
+#define OT_REG_INT_TEMPLATE			"{\"id\": %d,\"method\": \"properties_changed\",\"params\":[{\"did\" : \"%s\",\"siid\" : %d,\"piid\" : %d,\"value\" : %d}]}"
+#define OT_REG_STR_TEMPLATE			"{\"id\": %d,\"method\": \"properties_changed\",\"params\":[{\"did\" : \"%s\",\"siid\" : %d,\"piid\" : %d,\"value\" : \"%s\"}]}"
 
 #define		MIIO_INIT_CONDITION_NUM				1
 #define		MIIO_INIT_CONDITION_CONFIG			0
 
+#define		MIIO_EXIT_CONDITION					0
 /*
  * structure
  */
@@ -61,6 +61,14 @@ typedef struct msg_helper_t {
 	bool force_exit;
 } msg_helper_t;
 
+typedef struct miio_msg_ctl {
+	int id;
+	int sum;
+	int num;
+	cJSON *root_ack;
+	cJSON *item_result;
+} miio_msg_ctl_t;
+
 typedef enum{
     MIIO_CLIENT_NONE,
 	MIIO_CLIENT_RUN,
@@ -69,6 +77,7 @@ typedef enum{
 
 typedef struct miio_info_t {
 	miio_status_t	miio_status;
+	miio_status_t	miio_old_status;
 	int				time_sync;
 	int				did_acquired;
 } miio_info_t;
