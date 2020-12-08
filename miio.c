@@ -132,21 +132,17 @@ static int miio_routine_1000ms(void)
 {
 	int ret = 0;
 	message_t msg;
-	static int sync = 0;
-	if( (miio_info.miio_old_status != miio_info.miio_status)
-			|| info.status2 ) {
-		/********message body********/
-		msg_init(&msg);
-		msg.sender = msg.receiver = SERVER_MIIO;
-		msg.message = MSG_MIIO_PROPERTY_NOTIFY;
-		msg.arg_in.cat = MIIO_PROPERTY_CLIENT_STATUS;
-		msg.arg_in.dog = miio_info.miio_status;
-		manager_common_send_message(SERVER_MISS,   &msg);
-//		manager_common_send_message(SERVER_KERNEL,  &msg);
-		manager_common_send_message(SERVER_MANAGER, &msg);
-		/****************************/
-	}
-	if( miio_info.time_sync && (sync<=10) ) {
+	/********message body********/
+	msg_init(&msg);
+	msg.sender = msg.receiver = SERVER_MIIO;
+	msg.message = MSG_MIIO_PROPERTY_NOTIFY;
+	msg.arg_in.cat = MIIO_PROPERTY_CLIENT_STATUS;
+	msg.arg_in.dog = miio_info.miio_status;
+	manager_common_send_message(SERVER_MISS,   &msg);
+//	manager_common_send_message(SERVER_KERNEL,  &msg);
+	manager_common_send_message(SERVER_MANAGER, &msg);
+	/****************************/
+	if( miio_info.time_sync ) {
 		/********message body********/
 		msg_init(&msg);
 		msg.sender = msg.receiver = SERVER_MIIO;
@@ -159,14 +155,6 @@ static int miio_routine_1000ms(void)
 		manager_common_send_message(SERVER_VIDEO2, &msg);
 //		manager_common_send_message(SERVER_KERNEL,  &msg);
 		/****************************/
-		sync++;
-	}
-	else if( !miio_info.time_sync )
-		sync = 0;
-
-	if( info.status2 ) {
-		sync = 0;
-		info.status2 = 0;
 	}
 	if( miio_info.miio_status != STATE_CLOUD_CONNECTED)
 		miio_request_local_status();
@@ -2025,6 +2013,7 @@ static int server_message_proc(void)
 		case MSG_MANAGER_WAKEUP:
 			info.status2 = 1;
 			miio_activate_self();
+			break;
 		default:
 			log_qcy(DEBUG_SERIOUS, "not processed message = %x", msg.message);
 			break;
