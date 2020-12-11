@@ -477,7 +477,7 @@ static int miio_get_properties_vlaue(int id,char *did,int piid,int siid, cJSON *
 				msg.arg_in.cat = VIDEO_PROPERTY_TIME_WATERMARK;
 				manager_common_send_message(SERVER_VIDEO, &msg);
 			}
-			else if( piid == IID_2_7_RecordingMode) {
+			else if( piid == IID_2_5_WdrMode) {
 				msg.message = MSG_RECORDER_PROPERTY_GET;
 				msg.arg_in.cat = RECORDER_PROPERTY_RECORDING_MODE;
 				manager_common_send_message(SERVER_RECORDER, &msg);
@@ -534,6 +534,12 @@ static int miio_get_properties_vlaue(int id,char *did,int piid,int siid, cJSON *
 				msg.message = MSG_RECORDER_PROPERTY_GET;
 				msg.arg_in.cat = RECORDER_PROPERTY_SAVE_MODE;
 				manager_common_send_message(SERVER_RECORDER, &msg);
+			}
+			else {
+				usleep(1000 * 50);
+				msg.message = MSG_MANAGER_PROPERTY_GET_ACK;
+				msg.result = -1;
+				manager_common_send_message(SERVER_MIIO, &msg);
 			}
 			return -1;
 		default:
@@ -639,9 +645,6 @@ static int miio_set_properties_callback(message_arg_t arg_pass, int result, int 
 	if( !result ) {
 		item = cJSON_CreateNumber(0);
 		cJSON_AddItemToObject(item_result_param1,"code",item);
-		if(changed) {
-			miio_properties_changed(arg_pass.dog, arg_pass.chick, arg, size);
-		}
 	}
 	else {
 		item = cJSON_CreateNumber(-4004);
@@ -653,6 +656,9 @@ static int miio_set_properties_callback(message_arg_t arg_pass, int result, int 
 	ackbuf = cJSON_Print(root_ack);
     ret = miio_socket_send(ackbuf, strlen(ackbuf));
     log_qcy(DEBUG_INFO, "miio_set_properties ------ ackbuf = :%s ", ackbuf);
+    if(changed) {
+    	miio_properties_changed(arg_pass.dog, arg_pass.chick, arg, size);
+    }
     free(ackbuf);
     cJSON_Delete(root_ack);
     return ret;
@@ -731,7 +737,7 @@ static int miio_set_properties_vlaue(int id, char *did, int piid, int siid, cJSO
 				device_iot_config_t tmp;
 				memset(&tmp, 0, sizeof(device_iot_config_t));
 				tmp.led1_onoff = value_json->valueint;
-				tmp.led2_onoff = value_json->valueint;
+				tmp.led2_onoff = LED_OFF;
 				msg.message = MSG_DEVICE_CTRL_DIRECT;
 				msg.arg_in.cat = DEVICE_CTRL_LED;
 				msg.arg = &tmp;
@@ -1369,7 +1375,6 @@ static int miio_message_dispatcher(const char *msg, int len)
 				message.sender = message.receiver = SERVER_MIIO;
 				manager_common_send_message(SERVER_SCANNER,    &message);
 				/***************************************/
-				play_voice(SERVER_MIIO, SPEAKER_CTL_WIFI_CONNECT);
 			}
 		}
 		else if( json_verify_method_value(msg, "params", "wifi_connected", json_type_string) == 0) {
@@ -1379,6 +1384,18 @@ static int miio_message_dispatcher(const char *msg, int len)
 		}
 		else if(json_verify_method_value(msg, "params", "internet_connected", json_type_string) == 0) {
 			miio_info.miio_status = STATE_CLOUD_CONNECTED;
+			play_voice(SERVER_MIIO, SPEAKER_CTL_WIFI_CONNECT);
+			msg_init(&message);
+			device_iot_config_t dev_mst_tmp;
+			memset(&dev_mst_tmp, 0 , sizeof(device_iot_config_t));
+			dev_mst_tmp.led2_onoff = LED_OFF;
+			dev_mst_tmp.led1_onoff = LED_ON;
+			message.message = MSG_DEVICE_CTRL_DIRECT;
+			message.sender = message.receiver = SERVER_MIIO;
+			message.arg_in.cat = DEVICE_CTRL_LED;
+			message.arg = (void *)&dev_mst_tmp;
+			message.arg_size = sizeof(dev_mst_tmp);
+			manager_common_send_message(SERVER_DEVICE,    &message);
 		}
 		else if(json_verify_method_value(msg, "params", "cloud_connected", json_type_string) == 0) {
 			miio_info.miio_status = STATE_CLOUD_CONNECTED;

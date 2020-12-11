@@ -48,6 +48,10 @@
 #define		MIIO_INIT_CONDITION_CONFIG			0
 
 #define		MIIO_EXIT_CONDITION					0
+
+#define 	LED_ON 								1
+#define 	LED_OFF 							0
+
 /*
  * structure
  */
