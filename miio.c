@@ -714,7 +714,7 @@ static int miio_set_properties_vlaue(int id, char *did, int piid, int siid, cJSO
 			}
 			else if(piid == IID_2_4_TimeWatermark) {
 				log_qcy(DEBUG_INFO, "IID_2_4_TimeWatermark:%d ",value_json->valueint);
-				msg.message = MSG_VIDEO_PROPERTY_SET_DIRECT;
+				msg.message = MSG_VIDEO_PROPERTY_SET_EXT;
 				msg.arg_in.cat = VIDEO_PROPERTY_TIME_WATERMARK;
 				msg.arg = &(value_json->valueint);
 				msg.arg_size = sizeof(value_json->valueint);
