@@ -132,30 +132,31 @@ static int miio_routine_1000ms(void)
 {
 	int ret = 0;
 	message_t msg;
-	/********message body********/
-	msg_init(&msg);
-	msg.sender = msg.receiver = SERVER_MIIO;
-	msg.message = MSG_MIIO_PROPERTY_NOTIFY;
-	msg.arg_in.cat = MIIO_PROPERTY_CLIENT_STATUS;
-	msg.arg_in.dog = miio_info.miio_status;
-	manager_common_send_message(SERVER_MISS,   &msg);
-//	manager_common_send_message(SERVER_KERNEL,  &msg);
-	manager_common_send_message(SERVER_MANAGER, &msg);
-	/****************************/
-	if( miio_info.time_sync ) {
+	if( miio_info.miio_old_status != miio_info.miio_status ) {
 		/********message body********/
+		msg_init(&msg);
+		msg.sender = msg.receiver = SERVER_MIIO;
+		msg.message = MSG_MIIO_PROPERTY_NOTIFY;
+		msg.arg_in.cat = MIIO_PROPERTY_CLIENT_STATUS;
+		msg.arg_in.dog = miio_info.miio_status;
+		manager_common_send_message(SERVER_MISS,   &msg);
+	//	manager_common_send_message(SERVER_KERNEL,  &msg);
+		manager_common_send_message(SERVER_MANAGER, &msg);
+	}
+	/****************************/
+/*	if( miio_info.time_sync ) {
 		msg_init(&msg);
 		msg.sender = msg.receiver = SERVER_MIIO;
 		msg.message = MSG_MIIO_PROPERTY_NOTIFY;
 		msg.arg_in.cat = MIIO_PROPERTY_TIME_SYNC;
 		msg.arg_in.dog = miio_info.time_sync;
-		manager_common_send_message(SERVER_PLAYER,    &msg);
-		manager_common_send_message(SERVER_RECORDER,    &msg);
+		manager_common_send_message(SERVER_PLAYER, &msg);
+		manager_common_send_message(SERVER_RECORDER, &msg);
 		manager_common_send_message(SERVER_VIDEO, &msg);
 		manager_common_send_message(SERVER_VIDEO2, &msg);
-//		manager_common_send_message(SERVER_KERNEL,  &msg);
-		/****************************/
+		manager_common_send_message(SERVER_KERNEL,  &msg);
 	}
+*/
 	if( miio_info.miio_status != STATE_CLOUD_CONNECTED)
 		miio_request_local_status();
 	if( !miio_info.time_sync )
