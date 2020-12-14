@@ -66,7 +66,7 @@ static miio_info_t			miio_info;
 static int					message_id;
 static struct msg_helper_t 	msg_helper;
 static int					did_rpc_id;
-static pthread_rwlock_t		ilock = PTHREAD_MUTEX_INITIALIZER;
+static pthread_rwlock_t		ilock = PTHREAD_RWLOCK_INITIALIZER;
 static pthread_mutex_t		mutex = PTHREAD_MUTEX_INITIALIZER;
 static pthread_cond_t		cond = PTHREAD_COND_INITIALIZER;
 static miio_msg_ctl_t 		miio_msg_ctl;
@@ -920,20 +920,20 @@ static int miio_properties_changed(int piid, int siid, void *arg, int size)
     switch(siid) {
     	case IID_2_CameraControl:
     		if( piid == IID_2_3_NightShot ) {
-				if(*((int*)arg))
-					snprintf(ackbuf,ACK_MAX, OT_REG_INT_TEMPLATE,id,config.device.did,siid,piid, *(int*)arg );
+//				if(*((int*)arg))
+				snprintf(ackbuf,ACK_MAX, OT_REG_INT_TEMPLATE,id,config.device.did,siid,piid, *(int*)arg );
     			/********message body********/
-    			message_t dev_send_msg;
-    			device_iot_config_t device_iot_tmp;
-    			msg_init(&dev_send_msg);
-    			memset(&device_iot_tmp, 0 , sizeof(device_iot_config_t));
-    			device_iot_tmp.day_night_mode = *((int*)arg);
-    			dev_send_msg.message = MSG_DEVICE_CTRL_DIRECT;
-    			dev_send_msg.sender = dev_send_msg.receiver = SERVER_VIDEO;
-    			dev_send_msg.arg = (void*)&device_iot_tmp;
-    			dev_send_msg.arg_in.cat = DEVICE_CTRL_DAY_NIGHT_MODE;
-    			dev_send_msg.arg_size = sizeof(device_iot_config_t);
-    			manager_common_send_message(SERVER_DEVICE, &dev_send_msg);
+//    			message_t dev_send_msg;
+//   			device_iot_config_t device_iot_tmp;
+//    			msg_init(&dev_send_msg);
+//    			memset(&device_iot_tmp, 0 , sizeof(device_iot_config_t));
+//    			device_iot_tmp.day_night_mode = *((int*)arg);
+//    			dev_send_msg.message = MSG_DEVICE_CTRL_DIRECT;
+//   			dev_send_msg.sender = dev_send_msg.receiver = SERVER_VIDEO;
+//    			dev_send_msg.arg = (void*)&device_iot_tmp;
+//    			dev_send_msg.arg_in.cat = DEVICE_CTRL_DAY_NIGHT_MODE;
+//    			dev_send_msg.arg_size = sizeof(device_iot_config_t);
+//    			manager_common_send_message(SERVER_DEVICE, &dev_send_msg);
     			/***************************/
     		}
     		else if( piid == IID_2_7_RecordingMode ) {
@@ -949,6 +949,9 @@ static int miio_properties_changed(int piid, int siid, void *arg, int size)
     			msg.arg_size = size;
     			manager_common_send_message(SERVER_VIDEO2, &msg);
     			/****************************/
+    		}
+    		else if( piid == IID_2_4_TimeWatermark ) {
+    			snprintf(ackbuf,ACK_MAX, OT_REG_INT_TEMPLATE,id,config.device.did,siid,piid, *(int*)arg );
     		}
     		break;
 		case IID_5_MotionDetection:
@@ -1129,7 +1132,7 @@ static int miio_action_func(int id,char *did,int siid,int aiid,cJSON *json_in)
 			}
 			else if(aiid == IID_4_2_PopUp) {
 				log_qcy(DEBUG_INFO, "IID_4_2_PopUp");
-				msg.message = MSG_DEVICE_CTRL_DIRECT;
+				msg.message = MSG_DEVICE_ACTION;
 				msg.arg_in.cat = DEVICE_ACTION_SD_UMOUNT;
 				manager_common_send_message(SERVER_DEVICE, &msg);
 			}
@@ -1385,6 +1388,10 @@ static int miio_message_dispatcher(const char *msg, int len)
 		}
 		else if(json_verify_method_value(msg, "params", "internet_connected", json_type_string) == 0) {
 			miio_info.miio_status = STATE_CLOUD_CONNECTED;
+		}
+		else if(json_verify_method_value(msg, "params", "cloud_connected", json_type_string) == 0) {
+			miio_info.miio_status = STATE_CLOUD_CONNECTED;
+
 			play_voice(SERVER_MIIO, SPEAKER_CTL_WIFI_CONNECT);
 			msg_init(&message);
 			device_iot_config_t dev_mst_tmp;
@@ -1397,9 +1404,6 @@ static int miio_message_dispatcher(const char *msg, int len)
 			message.arg = (void *)&dev_mst_tmp;
 			message.arg_size = sizeof(dev_mst_tmp);
 			manager_common_send_message(SERVER_DEVICE,    &message);
-		}
-		else if(json_verify_method_value(msg, "params", "cloud_connected", json_type_string) == 0) {
-			miio_info.miio_status = STATE_CLOUD_CONNECTED;
 		}
 		return 0;
 	}
@@ -1916,13 +1920,16 @@ static int server_message_proc(void)
 	int ret = 0;
 	message_t msg;
 	message_t send_msg;
-	if( info.msg_lock ) return 0;
 //condition
 	pthread_mutex_lock(&mutex);
 	if( message.head == message.tail ) {
 		if( (info.status == info.old_status ) ) {
 			pthread_cond_wait(&cond,&mutex);
 		}
+	}
+	if( info.msg_lock ) {
+		pthread_mutex_unlock(&mutex);
+		return 0;
 	}
 	msg_init(&msg);
 	ret = msg_buffer_pop(&message, &msg);
