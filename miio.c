@@ -1050,6 +1050,7 @@ static int miio_action_func_ack(message_arg_t arg_pass, int result, int size, vo
 {
 	int ret = -1;
 	char ackbuf[ACK_MAX];
+	memset(ackbuf, 0, ACK_MAX);
     switch(arg_pass.chick) {
 		case IID_4_MemoryCardManagement:
 			if(arg_pass.dog == IID_4_1_Format) {
@@ -2105,9 +2106,13 @@ static void task_exit(void)
 {
 	switch( info.status ){
 		case EXIT_INIT:
-			info.error = MIIO_EXIT_CONDITION;
+			log_qcy(DEBUG_INFO,"MIIO: switch to exit task!");
 			if( info.task.msg.sender == SERVER_MANAGER) {
+				info.error = MIIO_EXIT_CONDITION;
 				info.error &= (info.task.msg.arg_in.cat);
+			}
+			else {
+				info.error = 0;
 			}
 			info.status = EXIT_SERVER;
 			break;
