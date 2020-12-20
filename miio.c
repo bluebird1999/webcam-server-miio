@@ -920,20 +920,19 @@ static int miio_properties_changed(int piid, int siid, void *arg, int size)
     switch(siid) {
     	case IID_2_CameraControl:
     		if( piid == IID_2_3_NightShot ) {
-//				if(*((int*)arg))
+    			/***************************/
 				snprintf(ackbuf,ACK_MAX, OT_REG_INT_TEMPLATE,id,config.device.did,siid,piid, *(int*)arg );
-    			/********message body********/
-//    			message_t dev_send_msg;
-//   			device_iot_config_t device_iot_tmp;
-//    			msg_init(&dev_send_msg);
-//    			memset(&device_iot_tmp, 0 , sizeof(device_iot_config_t));
-//    			device_iot_tmp.day_night_mode = *((int*)arg);
-//    			dev_send_msg.message = MSG_DEVICE_CTRL_DIRECT;
-//   			dev_send_msg.sender = dev_send_msg.receiver = SERVER_VIDEO;
-//    			dev_send_msg.arg = (void*)&device_iot_tmp;
-//    			dev_send_msg.arg_in.cat = DEVICE_CTRL_DAY_NIGHT_MODE;
-//    			dev_send_msg.arg_size = sizeof(device_iot_config_t);
-//    			manager_common_send_message(SERVER_DEVICE, &dev_send_msg);
+    			message_t dev_send_msg;
+    			device_iot_config_t device_iot_tmp;
+    			msg_init(&dev_send_msg);
+    			memset(&device_iot_tmp, 0 , sizeof(device_iot_config_t));
+    			device_iot_tmp.day_night_mode = *((int*)arg);
+    			dev_send_msg.message = MSG_DEVICE_CTRL_DIRECT;
+    			dev_send_msg.sender = dev_send_msg.receiver = SERVER_VIDEO;
+    			dev_send_msg.arg = (void*)&device_iot_tmp;
+    			dev_send_msg.arg_in.cat = DEVICE_CTRL_DAY_NIGHT_MODE;
+    			dev_send_msg.arg_size = sizeof(device_iot_config_t);
+    			manager_common_send_message(SERVER_DEVICE, &dev_send_msg);
     			/***************************/
     		}
     		else if( piid == IID_2_7_RecordingMode ) {
@@ -951,6 +950,9 @@ static int miio_properties_changed(int piid, int siid, void *arg, int size)
     			/****************************/
     		}
     		else if( piid == IID_2_4_TimeWatermark ) {
+    			snprintf(ackbuf,ACK_MAX, OT_REG_INT_TEMPLATE,id,config.device.did,siid,piid, *(int*)arg );
+    		}
+    		else if( piid == IID_2_1_On ) {
     			snprintf(ackbuf,ACK_MAX, OT_REG_INT_TEMPLATE,id,config.device.did,siid,piid, *(int*)arg );
     		}
     		break;
@@ -1420,6 +1422,7 @@ next_level:
        }
        else{
 			miio_info.time_sync = 1;
+			play_voice(SERVER_MIIO, SPEAKER_CTL_DEV_START_FINISH);
        }
        return 0;
     }
