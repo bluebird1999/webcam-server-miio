@@ -45,7 +45,7 @@
 #include "../../server/player/player_interface.h"
 #include "../../server/kernel/kernel_interface.h"
 #include "../../server/speaker/speaker_interface.h"
-//#include "../../server/micloud/micloud_interface.h"
+#include "../../server/micloud/micloud_interface.h"
 //server header
 #include "mi.h"
 #include "miio.h"
@@ -964,8 +964,8 @@ static int miio_properties_changed(int piid, int siid, void *arg, int size)
 					snprintf(ackbuf,ACK_MAX, OT_REG_BOOL_TEMPLATE,id,config.device.did,siid,piid, "false" );
 				//send to micloud
 				msg_init(&msg);
-//				msg.message = MSG_MICLOUD_CHANGE_PARA;
-//				msg.arg_in.cat = MICLOUD_CTRL_MOTION_SWITCH;
+				msg.message = MSG_MICLOUD_CHANGE_PARA;
+				msg.arg_in.cat = MICLOUD_CTRL_MOTION_SWITCH;
 				msg.arg = arg;
 				msg.arg_size = sizeof(int);
 				manager_common_send_message(SERVER_MICLOUD, &msg);
@@ -974,8 +974,8 @@ static int miio_properties_changed(int piid, int siid, void *arg, int size)
 				snprintf(ackbuf,ACK_MAX, OT_REG_INT_TEMPLATE,id,config.device.did,siid,piid, *((int*)arg) );
 				//send to micloud
 				msg_init(&msg);
-//				msg.message = MSG_MICLOUD_CHANGE_PARA;
-//				msg.arg_in.cat = MICLOUD_CTRL_MOTION_ALARM_INTERVAL;
+				msg.message = MSG_MICLOUD_CHANGE_PARA;
+				msg.arg_in.cat = MICLOUD_CTRL_MOTION_ALARM_INTERVAL;
 				msg.arg = arg;
 				msg.arg_size = sizeof(int);
 				manager_common_send_message(SERVER_MICLOUD, &msg);
@@ -984,8 +984,8 @@ static int miio_properties_changed(int piid, int siid, void *arg, int size)
 				snprintf(ackbuf,ACK_MAX, OT_REG_INT_TEMPLATE,id,config.device.did,siid,piid, *((int*)arg) );
 				//send to micloud
 				msg_init(&msg);
-//				msg.message = MSG_MICLOUD_CHANGE_PARA;
-//				msg.arg_in.cat = MICLOUD_CTRL_MOTION_SENSITIVITY;
+				msg.message = MSG_MICLOUD_CHANGE_PARA;
+				msg.arg_in.cat = MICLOUD_CTRL_MOTION_SENSITIVITY;
 				msg.arg =arg;
 				msg.arg_size = sizeof(int);
 				manager_common_send_message(SERVER_MICLOUD, &msg);
@@ -1000,8 +1000,8 @@ static int miio_properties_changed(int piid, int siid, void *arg, int size)
 				snprintf(ackbuf, ACK_MAX,OT_REG_STR_TEMPLATE,id,config.device.did,siid,piid,StartTime);
 				//send to micloud
 				msg_init(&msg);
-//				msg.message = MSG_MICLOUD_CHANGE_PARA;
-//				msg.arg_in.cat = MICLOUD_CTRL_MOTION_START;
+				msg.message = MSG_MICLOUD_CHANGE_PARA;
+				msg.arg_in.cat = MICLOUD_CTRL_MOTION_START;
 				msg.arg = StartTime;
 				msg.arg_size = sizeof(StartTime);
 				manager_common_send_message(SERVER_MICLOUD, &msg);
@@ -1016,8 +1016,8 @@ static int miio_properties_changed(int piid, int siid, void *arg, int size)
 				snprintf(ackbuf,ACK_MAX, OT_REG_STR_TEMPLATE,id,config.device.did,siid,piid,EndTime);
 				//send to micloud
 				msg_init(&msg);
-//				msg.message = MSG_MICLOUD_CHANGE_PARA;
-//				msg.arg_in.cat = MICLOUD_CTRL_MOTION_END;
+				msg.message = MSG_MICLOUD_CHANGE_PARA;
+				msg.arg_in.cat = MICLOUD_CTRL_MOTION_END;
 				msg.arg = EndTime;
 				msg.arg_size = sizeof(EndTime);
 				manager_common_send_message(SERVER_MICLOUD, &msg);
@@ -1031,8 +1031,8 @@ static int miio_properties_changed(int piid, int siid, void *arg, int size)
 					snprintf(ackbuf,ACK_MAX, OT_REG_BOOL_TEMPLATE,id,config.device.did,siid,piid, "false" );
 				//send to micloud
 				msg_init(&msg);
-//				msg.message = MSG_MICLOUD_CHANGE_PARA;
-//				msg.arg_in.cat = MICLOUD_CTRL_CUSTOM_WARNING_PUSH ;
+				msg.message = MSG_MICLOUD_CHANGE_PARA;
+				msg.arg_in.cat = MICLOUD_CTRL_CUSTOM_WARNING_PUSH ;
 				msg.arg = arg;
 				msg.arg_size = sizeof(int);
 				manager_common_send_message(SERVER_MICLOUD, &msg);
