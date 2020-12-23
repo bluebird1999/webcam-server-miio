@@ -36,11 +36,9 @@
 #include "../../server/miss/miss_local.h"
 #include "../../server/miss/miss_interface.h"
 #include "../../manager/manager_interface.h"
-#include "../../server/video/video_interface.h"
 #include "../../server/audio/audio_interface.h"
 #include "../../server/recorder/recorder_interface.h"
 #include "../../server/device/device_interface.h"
-#include "../../server/video2/video2_interface.h"
 #include "../../server/scanner/scanner_interface.h"
 #include "../../server/player/player_interface.h"
 #include "../../server/kernel/kernel_interface.h"
@@ -49,6 +47,9 @@
 //server header
 #include "mi.h"
 #include "miio.h"
+
+#include "../video/video_interface.h"
+#include "../video2/video2_interface.h"
 #include "miio_interface.h"
 #include "miio_message.h"
 #include "ntp.h"
@@ -484,29 +485,29 @@ static int miio_get_properties_vlaue(int id,char *did,int piid,int siid, cJSON *
 				manager_common_send_message(SERVER_RECORDER, &msg);
 			}
 			else if( piid == IID_2_8_MotionTracking) {
-				msg.message = MSG_VIDEO2_PROPERTY_GET;
-				msg.arg_in.cat = VIDEO2_PROPERTY_MOTION_SWITCH;
-				manager_common_send_message(SERVER_VIDEO2, &msg);
+				msg.message = MSG_VIDEO_PROPERTY_GET;
+				msg.arg_in.cat = VIDEO_PROPERTY_MOTION_SWITCH;
+				manager_common_send_message(SERVER_VIDEO, &msg);
 			}
 			return -1;
 		case IID_5_MotionDetection:
-			msg.message = MSG_VIDEO2_PROPERTY_GET;
+			msg.message = MSG_VIDEO_PROPERTY_GET;
 			if( piid == IID_5_1_MotionDetection ) {
-				msg.arg_in.cat = VIDEO2_PROPERTY_MOTION_SWITCH;
+				msg.arg_in.cat = VIDEO_PROPERTY_MOTION_SWITCH;
 			}
 			else if( piid == IID_5_2_AlarmInterval) {
-				msg.arg_in.cat = VIDEO2_PROPERTY_MOTION_ALARM_INTERVAL;
+				msg.arg_in.cat = VIDEO_PROPERTY_MOTION_ALARM_INTERVAL;
 			}
 			else if( piid == IID_5_3_DetectionSensitivity) {
-				msg.arg_in.cat = VIDEO2_PROPERTY_MOTION_SENSITIVITY;
+				msg.arg_in.cat = VIDEO_PROPERTY_MOTION_SENSITIVITY;
 			}
 			else if( piid == IID_5_4_MotionDetectionStartTime) {
-				msg.arg_in.cat = VIDEO2_PROPERTY_MOTION_START;
+				msg.arg_in.cat = VIDEO_PROPERTY_MOTION_START;
 			}
 			else if( piid == IID_5_5_MotionDetectionEndTime) {
-				msg.arg_in.cat = VIDEO2_PROPERTY_MOTION_END;
+				msg.arg_in.cat = VIDEO_PROPERTY_MOTION_END;
 			}
-			manager_common_send_message(SERVER_VIDEO2, &msg);
+			manager_common_send_message(SERVER_VIDEO, &msg);
 			return -1;
 		case IID_3_IndicatorLight:
 			if(	piid == IID_3_1_On ) {
@@ -522,9 +523,9 @@ static int miio_get_properties_vlaue(int id,char *did,int piid,int siid, cJSON *
 			return -1;
 		case IID_6_MoreSet:
 			if(	piid == IID_6_9_MotionAlarmPush ) {
-				msg.message = MSG_VIDEO2_PROPERTY_GET;
-				msg.arg_in.cat = VIDEO2_PROPERTY_CUSTOM_WARNING_PUSH;
-				manager_common_send_message(SERVER_VIDEO2, &msg);
+				msg.message = MSG_VIDEO_PROPERTY_GET;
+				msg.arg_in.cat = VIDEO_PROPERTY_CUSTOM_WARNING_PUSH;
+				manager_common_send_message(SERVER_VIDEO, &msg);
 			}
 			else if ( piid == IID_6_10_DistortionSwitch ) {
 				msg.message = MSG_VIDEO_PROPERTY_GET;
@@ -697,7 +698,7 @@ static int miio_set_properties_vlaue(int id, char *did, int piid, int siid, cJSO
 			}
 			else if(piid == IID_2_2_ImageRollover) {
 				log_qcy(DEBUG_INFO, "IID_2_2_ImageRollover:%d ",value_json->valueint);
-				msg.message = MSG_VIDEO_PROPERTY_SET_EXT;
+				msg.message = MSG_VIDEO_PROPERTY_SET_DIRECT;
 				msg.arg_in.cat = VIDEO_PROPERTY_IMAGE_ROLLOVER;
 				msg.arg = &(value_json->valueint);
 				msg.arg_size = sizeof(value_json->valueint);
@@ -720,6 +721,9 @@ static int miio_set_properties_vlaue(int id, char *did, int piid, int siid, cJSO
 				msg.arg = &(value_json->valueint);
 				msg.arg_size = sizeof(value_json->valueint);
 				manager_common_send_message(SERVER_VIDEO, &msg);
+				msg.message = MSG_VIDEO2_PROPERTY_SET_EXT;
+				msg.arg_in.cat = VIDEO2_PROPERTY_TIME_WATERMARK;
+				manager_common_send_message(SERVER_VIDEO2, &msg);
 				return -1;
 			}
 			else if(piid == IID_2_7_RecordingMode) {
@@ -752,47 +756,47 @@ static int miio_set_properties_vlaue(int id, char *did, int piid, int siid, cJSO
 		case IID_5_MotionDetection:
 			if(piid == IID_5_1_MotionDetection) {
 				log_qcy(DEBUG_INFO, "IID_5_1_MotionDetection:%d ",value_json->valueint);
-				msg.message = MSG_VIDEO2_PROPERTY_SET_DIRECT;
-				msg.arg_in.cat = VIDEO2_PROPERTY_MOTION_SWITCH;
+				msg.message = MSG_VIDEO_PROPERTY_SET_DIRECT;
+				msg.arg_in.cat = VIDEO_PROPERTY_MOTION_SWITCH;
 				msg.arg = &(value_json->valueint);
 				msg.arg_size = sizeof(value_json->valueint);
-				manager_common_send_message(SERVER_VIDEO2, &msg);
+				manager_common_send_message(SERVER_VIDEO, &msg);
 				return -1;
 			}
 			else if(piid == IID_5_2_AlarmInterval) {
 				log_qcy(DEBUG_INFO, "IID_5_2_AlarmInterval:%d ",value_json->valueint);
-				msg.message = MSG_VIDEO2_PROPERTY_SET_DIRECT;
-				msg.arg_in.cat = VIDEO2_PROPERTY_MOTION_ALARM_INTERVAL;
+				msg.message = MSG_VIDEO_PROPERTY_SET_DIRECT;
+				msg.arg_in.cat = VIDEO_PROPERTY_MOTION_ALARM_INTERVAL;
 				msg.arg = &(value_json->valueint);
 				msg.arg_size = sizeof(value_json->valueint);
-				manager_common_send_message(SERVER_VIDEO2, &msg);
+				manager_common_send_message(SERVER_VIDEO, &msg);
 				return -1;
 			}
 			else if(piid == IID_5_3_DetectionSensitivity) {
 				log_qcy(DEBUG_INFO, "IID_5_3_DetectionSensitivity:%d ",value_json->valueint);
-				msg.message = MSG_VIDEO2_PROPERTY_SET_DIRECT;
-				msg.arg_in.cat = VIDEO2_PROPERTY_MOTION_SENSITIVITY;
+				msg.message = MSG_VIDEO_PROPERTY_SET_DIRECT;
+				msg.arg_in.cat = VIDEO_PROPERTY_MOTION_SENSITIVITY;
 				msg.arg = &(value_json->valueint);
 				msg.arg_size = sizeof(value_json->valueint);
-				manager_common_send_message(SERVER_VIDEO2, &msg);
+				manager_common_send_message(SERVER_VIDEO, &msg);
 				return -1;
 			}
 			else if(piid == IID_5_4_MotionDetectionStartTime) {
 				log_qcy(DEBUG_INFO, "IID_5_4_MotionDetectionStartTime:%s ",value_json->valuestring);
-				msg.message = MSG_VIDEO2_PROPERTY_SET_DIRECT;
-				msg.arg_in.cat = VIDEO2_PROPERTY_MOTION_START;
+				msg.message = MSG_VIDEO_PROPERTY_SET_DIRECT;
+				msg.arg_in.cat = VIDEO_PROPERTY_MOTION_START;
 				msg.arg = value_json->valuestring;
 				msg.arg_size =  strlen(value_json->valuestring) + 1;
-				manager_common_send_message(SERVER_VIDEO2, &msg);
+				manager_common_send_message(SERVER_VIDEO, &msg);
 				return -1;
 			}
 			else if(piid == IID_5_5_MotionDetectionEndTime) {
 				log_qcy(DEBUG_INFO, "IID_5_4_MotionDetectionEndTime:%s ",value_json->valuestring);
-				msg.message = MSG_VIDEO2_PROPERTY_SET_DIRECT;
-				msg.arg_in.cat = VIDEO2_PROPERTY_MOTION_END;
+				msg.message = MSG_VIDEO_PROPERTY_SET_DIRECT;
+				msg.arg_in.cat = VIDEO_PROPERTY_MOTION_END;
 				msg.arg = value_json->valuestring;
 				msg.arg_size =  strlen(value_json->valuestring) + 1;
-				manager_common_send_message(SERVER_VIDEO2, &msg);
+				manager_common_send_message(SERVER_VIDEO, &msg);
 				return -1;
 			}
 			break;
@@ -816,11 +820,11 @@ static int miio_set_properties_vlaue(int id, char *did, int piid, int siid, cJSO
 			}
 			else if(piid == IID_6_9_MotionAlarmPush) {
 				log_qcy(DEBUG_INFO, "IID_6_9_MotionAlarmPush:%d ",value_json->valueint);
-				msg.message = MSG_VIDEO2_PROPERTY_SET_DIRECT;
-				msg.arg_in.cat = VIDEO2_PROPERTY_CUSTOM_WARNING_PUSH;
+				msg.message = MSG_VIDEO_PROPERTY_SET_DIRECT;
+				msg.arg_in.cat = VIDEO_PROPERTY_CUSTOM_WARNING_PUSH;
 				msg.arg = &(value_json->valueint);
 				msg.arg_size = sizeof(value_json->valueint);
-				manager_common_send_message(SERVER_VIDEO2, &msg);
+				manager_common_send_message(SERVER_VIDEO, &msg);
 				return -1;
 			}
 			else if(piid == IID_6_10_DistortionSwitch) {
@@ -941,18 +945,21 @@ static int miio_properties_changed(int piid, int siid, void *arg, int size)
     			/********message body********/
     			message_t msg;
     			msg_init(&msg);
-    			msg.message = MSG_VIDEO2_PROPERTY_SET;
+    			msg.message = MSG_VIDEO_PROPERTY_SET;
     			msg.sender = msg.receiver = SERVER_RECORDER;
-    			msg.arg_in.cat = VIDEO2_PROPERTY_QUALITY;
+    			msg.arg_in.cat = VIDEO_PROPERTY_QUALITY;
     			msg.arg = arg;
     			msg.arg_size = size;
-    			manager_common_send_message(SERVER_VIDEO2, &msg);
+    			manager_common_send_message(SERVER_VIDEO, &msg);
     			/****************************/
     		}
     		else if( piid == IID_2_4_TimeWatermark ) {
     			snprintf(ackbuf,ACK_MAX, OT_REG_INT_TEMPLATE,id,config.device.did,siid,piid, *(int*)arg );
     		}
     		else if( piid == IID_2_1_On ) {
+    			snprintf(ackbuf,ACK_MAX, OT_REG_INT_TEMPLATE,id,config.device.did,siid,piid, *(int*)arg );
+    		}
+    		else if( piid == IID_2_2_ImageRollover ) {
     			snprintf(ackbuf,ACK_MAX, OT_REG_INT_TEMPLATE,id,config.device.did,siid,piid, *(int*)arg );
     		}
     		break;
@@ -967,7 +974,7 @@ static int miio_properties_changed(int piid, int siid, void *arg, int size)
 				msg.message = MSG_MICLOUD_CHANGE_PARA;
 				msg.arg_in.cat = MICLOUD_CTRL_MOTION_SWITCH;
 				msg.arg = arg;
-				msg.arg_size = sizeof(int);
+				msg.arg_size = size;
 				manager_common_send_message(SERVER_MICLOUD, &msg);
 			}
 			else if(piid == IID_5_2_AlarmInterval){
@@ -977,7 +984,7 @@ static int miio_properties_changed(int piid, int siid, void *arg, int size)
 				msg.message = MSG_MICLOUD_CHANGE_PARA;
 				msg.arg_in.cat = MICLOUD_CTRL_MOTION_ALARM_INTERVAL;
 				msg.arg = arg;
-				msg.arg_size = sizeof(int);
+				msg.arg_size = size;
 				manager_common_send_message(SERVER_MICLOUD, &msg);
 			}
 			else if( piid == IID_5_3_DetectionSensitivity){
@@ -987,7 +994,7 @@ static int miio_properties_changed(int piid, int siid, void *arg, int size)
 				msg.message = MSG_MICLOUD_CHANGE_PARA;
 				msg.arg_in.cat = MICLOUD_CTRL_MOTION_SENSITIVITY;
 				msg.arg =arg;
-				msg.arg_size = sizeof(int);
+				msg.arg_size = size;
 				manager_common_send_message(SERVER_MICLOUD, &msg);
 			}
 			else if( piid == IID_5_4_MotionDetectionStartTime) {
@@ -995,7 +1002,7 @@ static int miio_properties_changed(int piid, int siid, void *arg, int size)
 				char StartTime[16]={0};
 				sscanf((char*)arg, "%d:%d", &start_hour,&min);
 				log_qcy(DEBUG_INFO, "start_hour=%d  temp=%d  min =%d  sec =%d ",start_hour,min,min,0);
-				snprintf (StartTime, 16, "%02d:%02d",start_hour,min);
+				snprintf (StartTime, 16, "%02d:%02d:%d",start_hour,min,sec);
 				log_qcy(DEBUG_INFO, "StartTime:%s ",StartTime);
 				snprintf(ackbuf, ACK_MAX,OT_REG_STR_TEMPLATE,id,config.device.did,siid,piid,StartTime);
 				//send to micloud
@@ -1011,7 +1018,11 @@ static int miio_properties_changed(int piid, int siid, void *arg, int size)
 				int end_hour=0,min=0,sec=0;
 				char EndTime[16]={0};
 				sscanf((char*)arg, "%d:%d", &end_hour,&min);
-				snprintf (EndTime, 16, "%02d:%02d",end_hour,min );
+				if(end_hour ==0 && min==0) {
+					end_hour = 23;
+					min = 59;
+				}
+				snprintf (EndTime, 16, "%02d:%02d:%d",end_hour,min,sec );
 				log_qcy(DEBUG_INFO, "EndTime:%s ",EndTime);
 				snprintf(ackbuf,ACK_MAX, OT_REG_STR_TEMPLATE,id,config.device.did,siid,piid,EndTime);
 				//send to micloud
@@ -1034,7 +1045,7 @@ static int miio_properties_changed(int piid, int siid, void *arg, int size)
 				msg.message = MSG_MICLOUD_CHANGE_PARA;
 				msg.arg_in.cat = MICLOUD_CTRL_CUSTOM_WARNING_PUSH ;
 				msg.arg = arg;
-				msg.arg_size = sizeof(int);
+				msg.arg_size = size;
 				manager_common_send_message(SERVER_MICLOUD, &msg);
 				break;
 			}
@@ -1401,6 +1412,20 @@ static int miio_message_dispatcher(const char *msg, int len)
 			memset(&dev_mst_tmp, 0 , sizeof(device_iot_config_t));
 			dev_mst_tmp.led2_onoff = LED_OFF;
 			dev_mst_tmp.led1_onoff = LED_ON;
+			message.message = MSG_DEVICE_CTRL_DIRECT;
+			message.sender = message.receiver = SERVER_MIIO;
+			message.arg_in.cat = DEVICE_CTRL_LED;
+			message.arg = (void *)&dev_mst_tmp;
+			message.arg_size = sizeof(dev_mst_tmp);
+			manager_common_send_message(SERVER_DEVICE,    &message);
+		}
+		else if(json_verify_method_value(msg, "params", "internet_failed", json_type_string) == 0 || json_verify_method_value(msg, "params", "cloud_retry", json_type_string) == 0) {
+			play_voice(SERVER_MIIO, SPEAKER_CTL_INTERNET_CONNECT_DEFEAT);
+			msg_init(&message);
+			device_iot_config_t dev_mst_tmp;
+			memset(&dev_mst_tmp, 0 , sizeof(device_iot_config_t));
+			dev_mst_tmp.led2_onoff = LED_OFF;
+			dev_mst_tmp.led1_onoff = LED_FLICKER;
 			message.message = MSG_DEVICE_CTRL_DIRECT;
 			message.sender = message.receiver = SERVER_MIIO;
 			message.arg_in.cat = DEVICE_CTRL_LED;
