@@ -31,6 +31,8 @@
 #include <stdint.h>
 #include <pthread.h>
 #include <json-c/json.h>
+#include <malloc.h>
+
 //program header
 #include "../../tools/json/json.h"
 #include "../../tools/log.h"
