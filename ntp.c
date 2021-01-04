@@ -20,7 +20,9 @@
 #include <time.h>
 #include <json-c/json.h>
 #include <malloc.h>
-
+#ifdef DMALLOC_ENABLE
+#include <dmalloc.h>
+#endif
 
 //program header
 #include "../../tools/tools_interface.h"

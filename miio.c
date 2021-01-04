@@ -32,7 +32,9 @@
 #include <miss.h>
 #include <malloc.h>
 #include <malloc.h>
-
+#ifdef DMALLOC_ENABLE
+#include <dmalloc.h>
+#endif
 //program header
 #include "../../tools/tools_interface.h"
 #include "../../server/miss/miss_local.h"
@@ -46,6 +48,9 @@
 #include "../../server/kernel/kernel_interface.h"
 #include "../../server/speaker/speaker_interface.h"
 #include "../../server/micloud/micloud_interface.h"
+#include "../../server/video/video_interface.h"
+#include "../../server/video2/video2_interface.h"
+#include "../../server/video3/video3_interface.h"
 //server header
 #include "mi.h"
 #include "miio.h"
@@ -758,47 +763,47 @@ static int miio_set_properties_vlaue(int id, char *did, int piid, int siid, cJSO
 		case IID_5_MotionDetection:
 			if(piid == IID_5_1_MotionDetection) {
 				log_qcy(DEBUG_INFO, "IID_5_1_MotionDetection:%d ",value_json->valueint);
-				msg.message = MSG_VIDEO_PROPERTY_SET_DIRECT;
-				msg.arg_in.cat = VIDEO_PROPERTY_MOTION_SWITCH;
+				msg.message = MSG_VIDEO3_PROPERTY_SET_DIRECT;
+				msg.arg_in.cat = VIDEO3_PROPERTY_MOTION_SWITCH;
 				msg.arg = &(value_json->valueint);
 				msg.arg_size = sizeof(value_json->valueint);
-				manager_common_send_message(SERVER_VIDEO, &msg);
+				manager_common_send_message(SERVER_VIDEO3, &msg);
 				return -1;
 			}
 			else if(piid == IID_5_2_AlarmInterval) {
 				log_qcy(DEBUG_INFO, "IID_5_2_AlarmInterval:%d ",value_json->valueint);
-				msg.message = MSG_VIDEO_PROPERTY_SET_DIRECT;
-				msg.arg_in.cat = VIDEO_PROPERTY_MOTION_ALARM_INTERVAL;
+				msg.message = MSG_VIDEO3_PROPERTY_SET_DIRECT;
+				msg.arg_in.cat = VIDEO3_PROPERTY_MOTION_ALARM_INTERVAL;
 				msg.arg = &(value_json->valueint);
 				msg.arg_size = sizeof(value_json->valueint);
-				manager_common_send_message(SERVER_VIDEO, &msg);
+				manager_common_send_message(SERVER_VIDEO3, &msg);
 				return -1;
 			}
 			else if(piid == IID_5_3_DetectionSensitivity) {
 				log_qcy(DEBUG_INFO, "IID_5_3_DetectionSensitivity:%d ",value_json->valueint);
-				msg.message = MSG_VIDEO_PROPERTY_SET_DIRECT;
-				msg.arg_in.cat = VIDEO_PROPERTY_MOTION_SENSITIVITY;
+				msg.message = MSG_VIDEO3_PROPERTY_SET_DIRECT;
+				msg.arg_in.cat = VIDEO3_PROPERTY_MOTION_SENSITIVITY;
 				msg.arg = &(value_json->valueint);
 				msg.arg_size = sizeof(value_json->valueint);
-				manager_common_send_message(SERVER_VIDEO, &msg);
+				manager_common_send_message(SERVER_VIDEO3, &msg);
 				return -1;
 			}
 			else if(piid == IID_5_4_MotionDetectionStartTime) {
 				log_qcy(DEBUG_INFO, "IID_5_4_MotionDetectionStartTime:%s ",value_json->valuestring);
-				msg.message = MSG_VIDEO_PROPERTY_SET_DIRECT;
-				msg.arg_in.cat = VIDEO_PROPERTY_MOTION_START;
+				msg.message = MSG_VIDEO3_PROPERTY_SET_DIRECT;
+				msg.arg_in.cat = VIDEO3_PROPERTY_MOTION_START;
 				msg.arg = value_json->valuestring;
 				msg.arg_size =  strlen(value_json->valuestring) + 1;
-				manager_common_send_message(SERVER_VIDEO, &msg);
+				manager_common_send_message(SERVER_VIDEO3, &msg);
 				return -1;
 			}
 			else if(piid == IID_5_5_MotionDetectionEndTime) {
 				log_qcy(DEBUG_INFO, "IID_5_4_MotionDetectionEndTime:%s ",value_json->valuestring);
-				msg.message = MSG_VIDEO_PROPERTY_SET_DIRECT;
-				msg.arg_in.cat = VIDEO_PROPERTY_MOTION_END;
+				msg.message = MSG_VIDEO3_PROPERTY_SET_DIRECT;
+				msg.arg_in.cat = VIDEO3_PROPERTY_MOTION_END;
 				msg.arg = value_json->valuestring;
 				msg.arg_size =  strlen(value_json->valuestring) + 1;
-				manager_common_send_message(SERVER_VIDEO, &msg);
+				manager_common_send_message(SERVER_VIDEO3, &msg);
 				return -1;
 			}
 			break;
@@ -822,11 +827,11 @@ static int miio_set_properties_vlaue(int id, char *did, int piid, int siid, cJSO
 			}
 			else if(piid == IID_6_9_MotionAlarmPush) {
 				log_qcy(DEBUG_INFO, "IID_6_9_MotionAlarmPush:%d ",value_json->valueint);
-				msg.message = MSG_VIDEO_PROPERTY_SET_DIRECT;
-				msg.arg_in.cat = VIDEO_PROPERTY_CUSTOM_WARNING_PUSH;
+				msg.message = MSG_VIDEO3_PROPERTY_SET_DIRECT;
+				msg.arg_in.cat = VIDEO3_PROPERTY_CUSTOM_WARNING_PUSH;
 				msg.arg = &(value_json->valueint);
 				msg.arg_size = sizeof(value_json->valueint);
-				manager_common_send_message(SERVER_VIDEO, &msg);
+				manager_common_send_message(SERVER_VIDEO3, &msg);
 				return -1;
 			}
 			else if(piid == IID_6_10_DistortionSwitch) {
