@@ -119,6 +119,7 @@ static int miio_properties_changed(int piid, int siid, void *arg, int size);
 static int miio_query_device_did(void);
 static int miio_parse_did(char* msg, char *key);
 static void play_voice(int server_type, int type);
+static int miio_properties_notify(int piid, int siid, int value);
 
 /*
  * %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -129,6 +130,18 @@ static void play_voice(int server_type, int type);
 /*
  * helper
  */
+static int miio_properties_notify(int piid, int siid, int value)
+{
+	char ackbuf[ACK_MAX];
+	int ret = -1, id = 0;
+	id =  misc_generate_random_id();
+	snprintf(ackbuf,ACK_MAX, OT_REG_INT_TEMPLATE,id, config.device.did, siid, piid, value);
+	ret = miio_socket_send(ackbuf, strlen(ackbuf));
+	log_qcy(DEBUG_INFO, "MIIO property notify, %s", ackbuf);
+	return ret;
+}
+
+
 static void miio_activate_self(void)
 {
 	pthread_mutex_lock(&mutex);
@@ -500,21 +513,21 @@ static int miio_get_properties_vlaue(int id,char *did,int piid,int siid, cJSON *
 		case IID_5_MotionDetection:
 			msg.message = MSG_VIDEO_PROPERTY_GET;
 			if( piid == IID_5_1_MotionDetection ) {
-				msg.arg_in.cat = VIDEO_PROPERTY_MOTION_SWITCH;
+				msg.arg_in.cat = VIDEO3_PROPERTY_MOTION_SWITCH;
 			}
 			else if( piid == IID_5_2_AlarmInterval) {
-				msg.arg_in.cat = VIDEO_PROPERTY_MOTION_ALARM_INTERVAL;
+				msg.arg_in.cat = VIDEO3_PROPERTY_MOTION_ALARM_INTERVAL;
 			}
 			else if( piid == IID_5_3_DetectionSensitivity) {
-				msg.arg_in.cat = VIDEO_PROPERTY_MOTION_SENSITIVITY;
+				msg.arg_in.cat = VIDEO3_PROPERTY_MOTION_SENSITIVITY;
 			}
 			else if( piid == IID_5_4_MotionDetectionStartTime) {
-				msg.arg_in.cat = VIDEO_PROPERTY_MOTION_START;
+				msg.arg_in.cat = VIDEO3_PROPERTY_MOTION_START;
 			}
 			else if( piid == IID_5_5_MotionDetectionEndTime) {
-				msg.arg_in.cat = VIDEO_PROPERTY_MOTION_END;
+				msg.arg_in.cat = VIDEO3_PROPERTY_MOTION_END;
 			}
-			manager_common_send_message(SERVER_VIDEO, &msg);
+			manager_common_send_message(SERVER_VIDEO3, &msg);
 			return -1;
 		case IID_3_IndicatorLight:
 			if(	piid == IID_3_1_On ) {
@@ -530,9 +543,9 @@ static int miio_get_properties_vlaue(int id,char *did,int piid,int siid, cJSON *
 			return -1;
 		case IID_6_MoreSet:
 			if(	piid == IID_6_9_MotionAlarmPush ) {
-				msg.message = MSG_VIDEO_PROPERTY_GET;
-				msg.arg_in.cat = VIDEO_PROPERTY_CUSTOM_WARNING_PUSH;
-				manager_common_send_message(SERVER_VIDEO, &msg);
+				msg.message = MSG_VIDEO3_PROPERTY_GET;
+				msg.arg_in.cat = VIDEO3_PROPERTY_CUSTOM_WARNING_PUSH;
+				manager_common_send_message(SERVER_VIDEO3, &msg);
 			}
 			else if ( piid == IID_6_10_DistortionSwitch ) {
 				msg.message = MSG_VIDEO_PROPERTY_GET;
@@ -1375,6 +1388,7 @@ static int miio_message_dispatcher(const char *msg, int len)
 	message_t message;
     char ackbuf[MIIO_MAX_PAYLOAD];
     miio_info.miio_old_status = miio_info.miio_status;
+    log_qcy(DEBUG_INFO, "miio_message_dispatcher: msg =%s\n",msg);
 	if( json_verify_method_value(msg, "method", "local.bind", json_type_string) == 0) {
 		if( (json_verify_method_value(msg, "result", "ok", json_type_string) == 0) &&
 				miio_info.miio_status == STATE_WIFI_AP_MODE ) {
@@ -1476,7 +1490,9 @@ next_level:
 				message.arg = config.device.did;
 				message.arg_size = strlen(config.device.did) + 1;
 				manager_common_send_message(SERVER_MISS,   &message);
+				manager_common_send_message(SERVER_MICLOUD,   &message);
 				/********message body********/
+				miio_properties_notify( IID_2_1_On, IID_2_CameraControl, 1);
     	   }
        }
        return 0;
@@ -2005,6 +2021,7 @@ static int server_message_proc(void)
 			break;
 		case MSG_VIDEO_PROPERTY_GET_ACK:
 		case MSG_VIDEO2_PROPERTY_GET_ACK:
+		case MSG_VIDEO3_PROPERTY_GET_ACK:
 		case MSG_DEVICE_GET_PARA_ACK:
 		case MSG_RECORDER_PROPERTY_GET_ACK:
 		case MSG_MANAGER_PROPERTY_GET_ACK:
@@ -2020,6 +2037,7 @@ static int server_message_proc(void)
 		case MSG_MANAGER_PROPERTY_SET_ACK:
 		case MSG_VIDEO2_PROPERTY_SET_ACK:
 		case MSG_VIDEO2_PROPERTY_SET_EXT_ACK:
+		case MSG_VIDEO3_PROPERTY_SET_DIRECT_ACK:
 		case MSG_VIDEO2_PROPERTY_SET_DIRECT_ACK:
 			if( msg.arg_pass.handler != NULL)
 				( *( int(*)(message_arg_t,int,int,int,void*) ) msg.arg_pass.handler ) (msg.arg_pass, msg.result,
@@ -2041,6 +2059,11 @@ static int server_message_proc(void)
 		case MSG_KERNEL_OTA_DOWNLOAD_ACK:
 			//log_info("into MSG_KERNEL_OTA_DOWNLOAD_ACK\n");
 			ota_down_ack(msg.arg_pass.cat, msg.result);
+			break;
+		case MSG_DEVICE_ACTION:
+			if(msg.arg_in.cat == DEVICE_ACTION_SD_EJECTED || msg.arg_in.cat == DEVICE_ACTION_SD_INSERT) {
+				miio_properties_notify(IID_4_MemoryCardManagement, IID_4_1_Status, msg.arg_in.dog);
+			}
 			break;
 		case MSG_MIIO_PROPERTY_GET:
 		    /********message body********/
@@ -2235,7 +2258,7 @@ static void *server_func(void)
 	misc_set_thread_name("server_miio");
 	pthread_detach(pthread_self());
 	if( !message.init ) {
-		msg_buffer_init2(&message, MSG_BUFFER_OVERFLOW_NO, &mutex);
+		msg_buffer_init2(&message, _config_.msg_overrun, &mutex);
 	}
 	info.init = 1;
 	//default task

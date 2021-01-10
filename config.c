@@ -195,7 +195,7 @@ static int miio_config_device_read(int board)
 	len = 0;
 	//read os-release
 	memset(fname,0,sizeof(fname));
-	sprintf(fname,"%s%s",_config_.miio_path, CONFIG_MIIO_OSRELEASE_PATH);
+	sprintf(fname,"%s%s",_config_.qcy_path, CONFIG_MIIO_OSRELEASE_PATH);
 	fp = fopen(fname, "rb");
 	if (fp == NULL) {
 		return -1;
