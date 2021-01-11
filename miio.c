@@ -505,13 +505,13 @@ static int miio_get_properties_vlaue(int id,char *did,int piid,int siid, cJSON *
 				manager_common_send_message(SERVER_RECORDER, &msg);
 			}
 			else if( piid == IID_2_8_MotionTracking) {
-				msg.message = MSG_VIDEO_PROPERTY_GET;
-				msg.arg_in.cat = VIDEO_PROPERTY_MOTION_SWITCH;
-				manager_common_send_message(SERVER_VIDEO, &msg);
+				msg.message = MSG_VIDEO3_PROPERTY_GET;
+				msg.arg_in.cat = VIDEO3_PROPERTY_MOTION_SWITCH;
+				manager_common_send_message(SERVER_VIDEO3, &msg);
 			}
 			return -1;
 		case IID_5_MotionDetection:
-			msg.message = MSG_VIDEO_PROPERTY_GET;
+			msg.message = MSG_VIDEO3_PROPERTY_GET;
 			if( piid == IID_5_1_MotionDetection ) {
 				msg.arg_in.cat = VIDEO3_PROPERTY_MOTION_SWITCH;
 			}
