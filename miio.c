@@ -46,7 +46,6 @@
 #include "../../server/scanner/scanner_interface.h"
 #include "../../server/player/player_interface.h"
 #include "../../server/kernel/kernel_interface.h"
-#include "../../server/speaker/speaker_interface.h"
 #include "../../server/micloud/micloud_interface.h"
 #include "../../server/video/video_interface.h"
 #include "../../server/video2/video2_interface.h"
@@ -120,6 +119,7 @@ static int miio_query_device_did(void);
 static int miio_parse_did(char* msg, char *key);
 static void play_voice(int server_type, int type);
 static int miio_properties_notify(int piid, int siid, int value);
+static void notify_device_server(int message, int arg_cat, device_iot_config_t *tmp);
 
 /*
  * %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -1104,7 +1104,7 @@ static int miio_action_func_ack(message_arg_t arg_pass, int result, int size, vo
 			}
 			miio_socket_send(ackbuf, strlen(ackbuf));
 			break;
-		case IID_6_MoreSet:
+		case IID_6_MoreSet: {
 			if(arg_pass.dog == IID_6_1_Reboot) {
 				if(!result) {
 					sprintf(ackbuf, OT_REG_OK_TEMPLATE, arg_pass.cat);
@@ -1114,7 +1114,15 @@ static int miio_action_func_ack(message_arg_t arg_pass, int result, int size, vo
 				}
 			}
 			miio_socket_send(ackbuf, strlen(ackbuf));
+
+			device_iot_config_t tmp;
+			memset(&tmp, 0 , sizeof(device_iot_config_t));
+			tmp.led2_onoff = LED_ON;
+			tmp.led1_onoff = LED_OFF;
+			notify_device_server(MSG_DEVICE_CTRL_DIRECT, DEVICE_CTRL_LED, &tmp);
+			miio_properties_notify( IID_2_1_On, IID_2_CameraControl, 0);
 			break;
+		}
 		case IID_3_IndicatorLight:
 			if(arg_pass.dog == IID_3_1_On) {
 				log_qcy(DEBUG_INFO, "Light:  IID_3_1_On");
@@ -1375,10 +1383,23 @@ static void play_voice(int server_type, int type)
 	msg_init(&message);
 
 	message.sender = message.receiver = server_type;
-	message.message = MSG_SPEAKER_CTL_PLAY;
+	message.message = MSG_AUDIO_SPEAKER_CTL_PLAY;
 	message.arg_in.cat = type;
 
-	manager_common_send_message(SERVER_SPEAKER,    &message);
+	manager_common_send_message(SERVER_AUDIO,    &message);
+}
+
+static void notify_device_server(int message, int arg_cat, device_iot_config_t *tmp)
+{
+	message_t msg;
+	msg_init(&msg);
+
+	msg.message = message;
+	msg.sender = msg.receiver = SERVER_MIIO;
+	msg.arg = tmp;
+	msg.arg_in.cat = arg_cat;
+	msg.arg_size = sizeof(device_iot_config_t);
+	manager_common_send_message(SERVER_DEVICE, &msg);
 }
 
 static int miio_message_dispatcher(const char *msg, int len)
@@ -1386,8 +1407,10 @@ static int miio_message_dispatcher(const char *msg, int len)
 	int ret = -1, id = 0;
 	bool sendack = false;
 	message_t message;
+	device_iot_config_t tmp;
     char ackbuf[MIIO_MAX_PAYLOAD];
     miio_info.miio_old_status = miio_info.miio_status;
+    memset(&tmp, 0 , sizeof(device_iot_config_t));
     log_qcy(DEBUG_INFO, "miio_message_dispatcher: msg =%s\n",msg);
 	if( json_verify_method_value(msg, "method", "local.bind", json_type_string) == 0) {
 		if( (json_verify_method_value(msg, "result", "ok", json_type_string) == 0) &&
@@ -1428,31 +1451,15 @@ static int miio_message_dispatcher(const char *msg, int len)
 			miio_info.miio_status = STATE_CLOUD_CONNECTED;
 
 			play_voice(SERVER_MIIO, SPEAKER_CTL_WIFI_CONNECT);
-			msg_init(&message);
-			device_iot_config_t dev_mst_tmp;
-			memset(&dev_mst_tmp, 0 , sizeof(device_iot_config_t));
-			dev_mst_tmp.led2_onoff = LED_OFF;
-			dev_mst_tmp.led1_onoff = LED_ON;
-			message.message = MSG_DEVICE_CTRL_DIRECT;
-			message.sender = message.receiver = SERVER_MIIO;
-			message.arg_in.cat = DEVICE_CTRL_LED;
-			message.arg = (void *)&dev_mst_tmp;
-			message.arg_size = sizeof(dev_mst_tmp);
-			manager_common_send_message(SERVER_DEVICE,    &message);
+			tmp.led2_onoff = LED_OFF;
+			tmp.led1_onoff = LED_ON;
+			notify_device_server(MSG_DEVICE_CTRL_DIRECT, DEVICE_CTRL_LED, &tmp);
 		}
 		else if(json_verify_method_value(msg, "params", "internet_failed", json_type_string) == 0 || json_verify_method_value(msg, "params", "cloud_retry", json_type_string) == 0) {
 			play_voice(SERVER_MIIO, SPEAKER_CTL_INTERNET_CONNECT_DEFEAT);
-			msg_init(&message);
-			device_iot_config_t dev_mst_tmp;
-			memset(&dev_mst_tmp, 0 , sizeof(device_iot_config_t));
-			dev_mst_tmp.led2_onoff = LED_OFF;
-			dev_mst_tmp.led1_onoff = LED_FLICKER;
-			message.message = MSG_DEVICE_CTRL_DIRECT;
-			message.sender = message.receiver = SERVER_MIIO;
-			message.arg_in.cat = DEVICE_CTRL_LED;
-			message.arg = (void *)&dev_mst_tmp;
-			message.arg_size = sizeof(dev_mst_tmp);
-			manager_common_send_message(SERVER_DEVICE,    &message);
+			tmp.led2_onoff = LED_OFF;
+			tmp.led1_onoff = LED_FLICKER;
+			notify_device_server(MSG_DEVICE_CTRL_DIRECT, DEVICE_CTRL_LED, &tmp);
 		}
 		return 0;
 	}
@@ -1468,7 +1475,6 @@ next_level:
        }
        else{
 			miio_info.time_sync = 1;
-			play_voice(SERVER_MIIO, SPEAKER_CTL_DEV_START_FINISH);
        }
        return 0;
     }
@@ -2062,7 +2068,7 @@ static int server_message_proc(void)
 			break;
 		case MSG_DEVICE_ACTION:
 			if(msg.arg_in.cat == DEVICE_ACTION_SD_EJECTED || msg.arg_in.cat == DEVICE_ACTION_SD_INSERT) {
-				miio_properties_notify(IID_4_MemoryCardManagement, IID_4_1_Status, msg.arg_in.dog);
+				miio_properties_notify(IID_4_1_Status, IID_4_MemoryCardManagement, msg.arg_in.dog);
 			}
 			break;
 		case MSG_MIIO_PROPERTY_GET:
