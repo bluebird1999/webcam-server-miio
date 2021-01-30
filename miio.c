@@ -116,10 +116,12 @@ static int miio_action_func(int id,char *did,int siid,int aiid,cJSON *json_in);
 static int miio_action_func_ack(message_arg_t arg_pass, int result, int size, void *arg);
 static int miio_properties_changed(int piid, int siid, void *arg, int size);
 static int miio_query_device_did(void);
+static void miio_request_motor_status(void);
 static int miio_parse_did(char* msg, char *key);
 static void play_voice(int server_type, int type);
 static int miio_properties_notify(int piid, int siid, int value);
 static void notify_device_server(int message, int arg_cat, device_iot_config_t *tmp);
+static int miio_properties_notify_sd_status(device_iot_config_t *tmp);
 
 /*
  * %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -141,6 +143,47 @@ static int miio_properties_notify(int piid, int siid, int value)
 	return ret;
 }
 
+static int miio_properties_notify_sd_status(device_iot_config_t *tmp)
+{
+	char *ackbuf = NULL;
+	int ret = -1, id = 0, i =0;
+	id =  misc_generate_random_id();
+
+	cJSON *change_root  = cJSON_CreateObject();
+	cJSON *param_obj  = cJSON_CreateArray();
+
+	cJSON_AddNumberToObject(change_root, "id", id);
+	cJSON_AddStringToObject(change_root, "method", "properties_changed");
+	cJSON_AddItemToObject(change_root, "params", param_obj);
+
+	for(i = 1; i < 4; i++)
+	{
+		cJSON *tmp0_obj  = cJSON_CreateObject();
+		cJSON_AddItemToArray(param_obj, tmp0_obj);
+
+		cJSON_AddStringToObject(tmp0_obj, "did",config.device.did);
+	    cJSON_AddNumberToObject(tmp0_obj, "piid", i);
+	    cJSON_AddNumberToObject(tmp0_obj, "siid", 4);
+
+	    if(i == 1)
+	    	cJSON_AddNumberToObject(tmp0_obj, "value", tmp->sd_iot_info.plug);
+	    if(i == 2)
+	    	cJSON_AddNumberToObject(tmp0_obj, "value", tmp->sd_iot_info.totalBytes / 1024);
+	    if(i == 3)
+	    	cJSON_AddNumberToObject(tmp0_obj, "value", tmp->sd_iot_info.freeBytes / 1024);
+
+	}
+
+
+	ackbuf  = cJSON_Print(change_root);
+	log_qcy(DEBUG_INFO, "MIIO property notify, %s", ackbuf);
+	ret = miio_socket_send(ackbuf, strlen(ackbuf));
+
+	free(ackbuf);
+	cJSON_Delete(change_root);
+
+	return ret;
+}
 
 static void miio_activate_self(void)
 {
@@ -178,12 +221,19 @@ static int miio_routine_1000ms(void)
 		manager_common_send_message(SERVER_KERNEL,  &msg);
 	}
 */
+	if(!miio_info.motor_ready)
+		miio_request_motor_status();
 	if( miio_info.miio_status != STATE_CLOUD_CONNECTED)
 		miio_request_local_status();
 	if( !miio_info.time_sync )
 		ntp_get_local_time();
 	if( config.iot.board_type && !miio_info.did_acquired )
 		miio_query_device_did();
+	if( miio_info.motor_ready && !miio_info.dev_start_fin)
+	{
+		play_voice(SERVER_MIIO, SPEAKER_CTL_DEV_START_FINISH);
+		miio_info.dev_start_fin = 1;
+	}
 	if( miio_info.miio_status == STATE_CLOUD_CONNECTED
 		&& miio_info.time_sync) {
 		if( config.iot.board_type && !miio_info.did_acquired)
@@ -255,6 +305,16 @@ static int miio_query_device_did(void)
 	return ret;
 }
 
+static void miio_request_motor_status(void)
+{
+	message_t msg;
+	msg_init(&msg);
+	msg.message = MSG_DEVICE_PROPERTY_GET;
+	msg.sender = msg.receiver = SERVER_MIIO;
+	msg.arg_pass.cat = DEVICE_ACTION_MOTO_STATUS;
+	manager_common_send_message(SERVER_DEVICE, &msg);
+}
+
 static void miio_request_local_status(void)
 {
 	char buf[128];
@@ -309,6 +369,9 @@ static int miio_get_properties_callback(message_arg_t arg_pass, int result, int 
 					item = cJSON_CreateNumber( *((int*)arg) );
 				}
 				else if( arg_pass.dog == IID_2_4_TimeWatermark) {
+					item = cJSON_CreateNumber( *((int*)arg) );
+				}
+				else if( arg_pass.dog == IID_2_6_MotionTrackingSwitch) {
 					item = cJSON_CreateNumber( *((int*)arg) );
 				}
 				else if( arg_pass.dog == IID_2_7_RecordingMode) {
@@ -503,6 +566,11 @@ static int miio_get_properties_vlaue(int id,char *did,int piid,int siid, cJSON *
 				msg.message = MSG_RECORDER_PROPERTY_GET;
 				msg.arg_in.cat = RECORDER_PROPERTY_RECORDING_MODE;
 				manager_common_send_message(SERVER_RECORDER, &msg);
+			}
+			else if( piid == IID_2_6_MotionTrackingSwitch) {
+				msg.message = MSG_VIDEO3_PROPERTY_GET;
+				msg.arg_in.cat = VIDEO3_PROPERTY_MOTION_TRACKING_SWITCH;
+				manager_common_send_message(SERVER_VIDEO3, &msg);
 			}
 			else if( piid == IID_2_8_MotionTracking) {
 				msg.message = MSG_VIDEO3_PROPERTY_GET;
@@ -746,6 +814,15 @@ static int miio_set_properties_vlaue(int id, char *did, int piid, int siid, cJSO
 				manager_common_send_message(SERVER_VIDEO2, &msg);
 				return -1;
 			}
+			else if(piid == IID_2_6_MotionTrackingSwitch) {
+				log_qcy(DEBUG_INFO, "IID_2_6_MotionTrackingSwitch:%d ",value_json->valueint);
+				msg.message = MSG_VIDEO3_PROPERTY_SET_DIRECT;
+				msg.arg_in.cat = VIDEO3_PROPERTY_MOTION_TRACKING_SWITCH;
+				msg.arg = &(value_json->valueint);
+				msg.arg_size = sizeof(value_json->valueint);
+				manager_common_send_message(SERVER_VIDEO3, &msg);
+				return -1;
+			}
 			else if(piid == IID_2_7_RecordingMode) {
 				log_qcy(DEBUG_INFO, "IID_2_7_RecordingMode:%d ",value_json->valueint);
 				msg.message = MSG_RECORDER_PROPERTY_SET;
@@ -937,7 +1014,7 @@ exit:
 
 static int miio_properties_changed(int piid, int siid, void *arg, int size)
 {
-	char ackbuf[ACK_MAX];
+	char ackbuf[ACK_MAX] = {0};
 	int ret = -1, id = 0;
     id =  misc_generate_random_id();
 	message_t msg;
@@ -1456,10 +1533,13 @@ static int miio_message_dispatcher(const char *msg, int len)
 			notify_device_server(MSG_DEVICE_CTRL_DIRECT, DEVICE_CTRL_LED, &tmp);
 		}
 		else if(json_verify_method_value(msg, "params", "internet_failed", json_type_string) == 0 || json_verify_method_value(msg, "params", "cloud_retry", json_type_string) == 0) {
-			play_voice(SERVER_MIIO, SPEAKER_CTL_INTERNET_CONNECT_DEFEAT);
-			tmp.led2_onoff = LED_OFF;
-			tmp.led1_onoff = LED_FLICKER;
-			notify_device_server(MSG_DEVICE_CTRL_DIRECT, DEVICE_CTRL_LED, &tmp);
+			if ( miio_info.miio_status == STATE_CLOUD_CONNECTED) {
+				miio_info.miio_status = STATE_CLOUD_TRYING;
+				play_voice(SERVER_MIIO, SPEAKER_CTL_INTERNET_CONNECT_DEFEAT);
+				tmp.led2_onoff = LED_OFF;
+				tmp.led1_onoff = LED_FLICKER;
+				notify_device_server(MSG_DEVICE_CTRL_DIRECT, DEVICE_CTRL_LED, &tmp);
+			}
 		}
 		return 0;
 	}
@@ -2022,6 +2102,12 @@ static int server_message_proc(void)
 		case MSG_MIIO_RPC_SEND:
 			rpc_send_msg(msg.arg_in.cat, msg.extra, msg.arg);
 			break;
+		case MSG_DEVICE_PROPERTY_GET_ACK:
+			if(msg.arg_pass.cat == DEVICE_ACTION_MOTO_STATUS) {
+				if(msg.arg_in.dog == 1)
+					miio_info.motor_ready = 1;
+			}
+			break;
 		case MSG_MIIO_RPC_REPORT_SEND:
 			rpc_send_report(msg.arg_in.cat, msg.extra, msg.arg);
 			break;
@@ -2067,8 +2153,13 @@ static int server_message_proc(void)
 			ota_down_ack(msg.arg_pass.cat, msg.result);
 			break;
 		case MSG_DEVICE_ACTION:
-			if(msg.arg_in.cat == DEVICE_ACTION_SD_EJECTED || msg.arg_in.cat == DEVICE_ACTION_SD_INSERT) {
+			if(msg.arg_in.cat == DEVICE_ACTION_SD_EJECTED)
+			{
 				miio_properties_notify(IID_4_1_Status, IID_4_MemoryCardManagement, msg.arg_in.dog);
+			}
+			else if(msg.arg_in.cat == DEVICE_ACTION_SD_INSERT)
+			{
+				miio_properties_notify_sd_status((device_iot_config_t *)msg.arg);
 			}
 			break;
 		case MSG_MIIO_PROPERTY_GET:

@@ -85,6 +85,8 @@ typedef struct miio_info_t {
 	miio_status_t	miio_old_status;
 	int				time_sync;
 	int				did_acquired;
+	int				motor_ready;
+	int				dev_start_fin;
 } miio_info_t;
 
 /*

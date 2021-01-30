@@ -20,7 +20,7 @@
 #define IID_2_3_NightShot                                                     3
 #define IID_2_4_TimeWatermark                                                 4
 #define IID_2_5_WdrMode                                                       5
-#define IID_2_6_GlimmerFullColor                                              6
+#define IID_2_6_MotionTrackingSwitch										  6
 #define IID_2_7_RecordingMode                                                 7
 #define IID_2_8_MotionTracking                                                8
 
@@ -43,7 +43,7 @@
 #define IID_5_5_MotionDetectionEndTime                                        5
 
 #define IID_6_MoreSet                                                         6
-#define IID_6_1_Ipaddr                                                        1
+#define IID_6_1_Reboot                                                        1
 #define IID_6_2_MacAddr                                                       2
 #define IID_6_3_WifiName                                                      3
 #define IID_6_4_WifiRssi                                                      4
@@ -53,7 +53,6 @@
 #define IID_6_8_CloudUploadEnable                                             8
 #define IID_6_9_MotionAlarmPush                                               9
 #define IID_6_10_DistortionSwitch                                             10
-#define IID_6_1_Reboot                                                        1
 /*
  * structure
  */

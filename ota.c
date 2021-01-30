@@ -56,9 +56,9 @@ static int ota_push_progress(int progress);
 static int ota_push_state(int state, int err_id)
 {
     log_qcy(DEBUG_INFO,"-----into ----ota_report_state---\n");
-    cJSON *item_id,*item_method,*item_params,*item_state = NULL; //props
+    cJSON *item_id = NULL,*item_method = NULL,*item_params = NULL,*item_state = NULL; //props
     int ret = -1, id = 0;
-    cJSON *root_props= 0;
+    cJSON *root_props= NULL;
     char *propsbuf = NULL;
 
     char *ota_state[OTA_STATE_BUSY+1] = {"idle", "downloading", "dowloaded", "installing", "wait_install", "installed", "failed", "busy"};
@@ -101,9 +101,9 @@ static int ota_push_state(int state, int err_id)
 static int ota_push_progress(int progress)
 {
     log_qcy(DEBUG_INFO,"-----into ----ota_report_progress---\n");
-    cJSON *item_id,*item_method,*item_params,*item_progress = NULL; //props
+    cJSON *item_id = NULL,*item_method = NULL,*item_params = NULL,*item_progress = NULL; //props
     int ret = -1, id = 0;
-    cJSON *root_props= 0;
+    cJSON *root_props= NULL;
     char *propsbuf = NULL;
     id =  misc_generate_random_id();
     root_props=cJSON_CreateObject();
@@ -128,9 +128,9 @@ static int ota_push_progress(int progress)
 int ota_get_state_ack(int did, int type, int status, int progress)
 {
     //log_qcy(DEBUG_INFO,"---ota_get_state_ack-  status=%d -- progress=%d  --did=%d---type-%d\n",status,progress,did,type);
-    cJSON *item_id,*item_result = NULL; //ack msg
+    cJSON *item_id = NULL,*item_result = NULL; //ack msg
     int ret = -1;
-    cJSON *root_ack= 0;
+    cJSON *root_ack= NULL;
     char *ackbuf = NULL;
     char *ota_state[OTA_STATE_BUSY+1] = {"idle", "downloading", "dowloaded", "installing", "wait_install", "installed", "failed", "busy"};
     root_ack=cJSON_CreateObject();
